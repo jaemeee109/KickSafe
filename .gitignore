@@ -1,0 +1,50 @@
+# Java / Spring
+*.class
+*.jar
+*.war
+*.ear
+target/
+build/
+
+# Maven / Gradle
+.mvn/
+!.mvn/wrapper/maven-wrapper.jar
+.gradle/
+build/
+
+# IntelliJ
+.idea/
+*.iml
+out/
+
+# Node / React
+node_modules/
+dist/
+build/
+.env
+.env.*
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Python / FastAPI
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+.venv/
+env/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/         # <--- 추가!
+
+# Roboflow datasets (용량 큼)
+datasets/
+export/
