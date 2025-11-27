@@ -10,12 +10,12 @@
 <P/>- 이재은 : 백엔드, AI
 <P/>- 전혜진 : 프론트엔드
 <p/><b>개요</b> : 'KickSafe'는 전동킥보드 주행 중 발생할 수 있는 위험 상황을 
-<p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;이미지/영상 기반 AI 모델로 탐지하고 위험 등급을 매기는 웹 서비스 입니다.
-<p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;사용자는 위험 상황을 게시물로 공유할 수 있으며,
-<p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;업로드 된 이미지 영상은 FastAPI + Roboflow AI 모델을 통해 자동 분석되어 점수(등급)로 표시됩니다.
+<p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;이미지/영상 기반 AI 모델로 탐지하고 위험 등급을 매기는 웹 서비스 입니다.
+<p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;사용자는 위험 상황을 게시물로 공유할 수 있으며,
+<p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;업로드 된 이미지 영상은 FastAPI + Roboflow AI 모델을 통해 자동 분석되어 점수(등급)로 표시됩니다.
 <p/><b>목적</b> : 최근 전동킥보드 이용이 대중화되며 사고 및 안전 문제가 지속적으로 증가됨에 따라,
-<p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;KickSafe 프로젝트는 이러한 현실 속에서 사용자들이 위험 상황을 더 쉽게 인지·공유 하도록 돕고,
-<p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;AI 분석을 통해 사전에 위험을 판단할 수 있는 정보를 제공하여 안전한 이동 환경을 만드는 것을 목표로 합니다.
+<p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;KickSafe 프로젝트는 이러한 현실 속에서 사용자들이 위험 상황을 더 쉽게 인지·공유 하도록 돕고,
+<p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;AI 분석을 통해 사전에 위험을 판단할 수 있는 정보를 제공하여 안전한 이동 환경을 만드는 것을 목표로 합니다.
 <p/>
 <p/>================================================================================
 <p/>
@@ -27,17 +27,17 @@
 <p/>================================================================================
 <p/>
 <p/><b>시스템 구조</b> :
-<p/>Client
+<p/><b>Client</b>
 <p/>   │
 <p/>   ├─ 소셜 로그인 요청 (카카오 / 구글 / 네이버 / 인스타그램)
 <p/>   ▼
-<p/>React (UI)
+<p/><b>React (UI)</b>
 <p/>   │   - 소셜 로그인 버튼 클릭
 <p/>   │   - Spring Boot 인증 엔드포인트로 리다이렉트
 <p/>   │
 <p/>   ├── Axios 요청 (JWT 포함)
 <p/>   ▼
-<p/>Spring Boot (REST API + Security)
+<p/><b>Spring Boot (REST API + Security)</b>b>
 <p/>   │  ├─ 소셜 로그인(OAuth2) 처리
 <p/>   │  │    - 카카오 / 구글 / 네이버 / 인스타 OAuth2 연동
 <p/>   │  │    - 최초 로그인 시 회원 정보 자동 생성(소셜회원가입)
@@ -47,7 +47,7 @@
 <p/>   │  ├─ 파일 업로드 / 제한(용량/개수)
 <p/>   │  └─ 관리자 기능(회원관리·블랙리스트 / 게시물관리)
 <p/>   ▼
-<p/>MariaDB
+<p/><b>MariaDB</b>b>
 <p/>   - 회원
 <p/>      · 소셜 타입(kakao/google/naver/instagram)
 <p/>      · 소셜 식별자(providerId)
@@ -57,7 +57,7 @@
 <p/>   - 첨부파일
 <p/>   - 블랙리스트 이력 등
 <p/>
-<p/>FastAPI (Python)
+<p/><b>FastAPI (Python)</b>b>
 <p/>   │
 <p/>   └─ Roboflow 모델로 이미지/영상 분석 → 위험 점수 반환
 <p/>      (Spring Boot에서 AI 서버 호출 후 결과를 게시물에 저장/표시)
@@ -66,10 +66,10 @@
 <p/><b>주요 기능</b> :
 <p/> - 로그인 / 회원관리 (소셜로그인/회원관리, 회원CRUD, 탈퇴시 블랙리스트 처리 방식)
 <p/> - 게시물 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;( 게시물CRUD, 게시물 첨부파일 필수, 파일 용량·개수 제한, 업로드 → AI 자동분석 → 위험도 출력)
+<p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;( 게시물CRUD, 게시물 첨부파일 필수, 파일 용량·개수 제한, 업로드 → AI 자동분석 → 위험도 출력)
 <p/> - AI 위험감지 기능
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (업로드된 이미지/영상을 FastAPI로 전송 → Roboflow가 객체 탐지 수행 → 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  위험요소 감지되면 점수 계산 → 게시물 상세페이지에서 즉시 확인 가능)
+<p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (업로드된 이미지/영상을 FastAPI로 전송 → Roboflow가 객체 탐지 수행 → 
+<p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  위험요소 감지되면 점수 계산 → 게시물 상세페이지에서 즉시 확인 가능)
 <p/> - 공통 모듈 ( 이미지 처리, 페이징, 예외 처리 및 공통 응답 형태)
 <p/>
 <p/>================================================================================
