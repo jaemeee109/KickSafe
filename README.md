@@ -4,11 +4,10 @@
 <p/><b>프로젝트 명</b> : KickSafe (킥세이프)
 <p/><b>개발 기간</b> : 2025.11.26 ~ ing
 <p/><b>과정</b> : K-디지털트레이닝 [심화, AI Roboflow를 활용한 부유물탐지 시스템 구축과정]
-<p/><b>인원</b> : 3명 
+<p/><b>인원</b> : 2명 
 <p/><b>역할분담</b> : 
-<p/>- 박희진 : 팀장 , 백엔드, AI
-<P/>- 이재은 : 백엔드, AI
-<P/>- 전혜진 : 프론트엔드
+<p/>- 박희진 : 팀장 , DataBase, SpringBoot, Roboflow, React
+<P/>- 이재은 :  Python, Roboflow
 <p/><b>개요</b> : 'KickSafe'는 전동킥보드 주행 중 발생할 수 있는 위험 상황을 
 <p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;이미지/영상 기반 AI 모델로 탐지하고 위험 등급을 매기는 웹 서비스 입니다.
 <p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;사용자는 위험 상황을 게시물로 공유할 수 있으며,
