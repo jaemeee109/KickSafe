@@ -1,0 +1,90 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.4.8' // 최신 스프링 부트
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.kicksafe'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21) // 가장 빠르고 최신인 자바 21 사용
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // ================== 1. 웹 & AI 통신 ==================
+    implementation 'org.springframework.boot:spring-boot-starter-web' // 기본 웹 서버 기능
+    implementation 'org.springframework.boot:spring-boot-starter-validation' // 데이터 검증 (@NotNull 등)
+    implementation 'org.springframework.boot:spring-boot-starter-webflux' // [중요] AI 서버와 비동기 통신 (서버 멈춤 방지)
+
+    // ================== 2. 보안 & 로그인 (JWT) ==================
+    implementation 'org.springframework.boot:spring-boot-starter-security' // 스프링 보안
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client' // 소셜 로그인 준비
+
+    // JWT 토큰 관련 라이브러리 (로그인 인증표 만들기)
+    implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+
+    // ================== 3. 데이터베이스 (MariaDB & JPA) ==================
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client' // MariaDB 연결 드라이버
+
+    // QueryDSL (복잡한 쿼리를 쉽게 짜게 해주는 도구)
+    implementation 'com.querydsl:querydsl-jpa:5.0.0:jakarta'
+    annotationProcessor "com.querydsl:querydsl-apt:5.0.0:jakarta"
+    annotationProcessor "jakarta.annotation:jakarta.annotation-api"
+    annotationProcessor "jakarta.persistence:jakarta.persistence-api"
+
+    // ================== 4. 편의 도구 ==================
+    implementation 'org.modelmapper:modelmapper:3.1.0' // DTO 변환기
+    implementation 'org.apache.commons:commons-lang3:3.12.0' // 문자열 처리 도구
+    compileOnly 'org.jetbrains:annotations:24.1.0'
+
+    // Lombok (코드 줄이기 마법사)
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
+    // ================== 5. 문서 & 모니터링 ==================
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0' // Swagger (API 문서 자동생성)
+    implementation 'org.springframework.boot:spring-boot-starter-actuator' // 서버 상태 확인
+
+    // ================== 6. 테스트 ==================
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'io.projectreactor:reactor-test' // 비동기 코드 테스트용
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+def querydslDir = layout.buildDirectory.get().getAsFile().getAbsolutePath() + '/generated/querydsl'
+
+sourceSets {
+    main.java.srcDirs += [ querydslDir ]
+}
+
+tasks.withType(JavaCompile) {
+    options.getGeneratedSourceOutputDirectory().set(file(querydslDir))
+    options.encoding = 'UTF-8'
+}
+
+clean {
+    delete file(querydslDir)
+}
