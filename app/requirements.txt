@@ -1,0 +1,15 @@
+# requirements.txt
+# ------------------------------------------
+# 파이썬 패키지(라이브러리) 목록
+# Maven의 pom.xml , Gradle build의 gradle 과 같은 역할
+# ------------------------------------------
+fastapi
+uvicorn[standard]
+python-multipart
+requests
+python-dotenv
+
+# YOLOv8 Oriented Bounding Box 모델용
+ultralytics #YOLOv8-OBB 학습/추론용
+pillow # 업로드된 이미지를 메모리에서 바로 처리하기 위한 기본 라이브러리
+numpy # 업로드된 이미지를 메모리에서 바로 처리하기 위한 기본 라이브러리
