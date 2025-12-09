@@ -70,16 +70,37 @@ def _parse_obb_result(result) -> List[OrientedBBox]:
     # names: 클래스 인덱스 -> 클래스 이름
     names = result.names
 
-    # OBB 우선 사용
     obb = getattr(result, "obb", None)
     if obb is not None and hasattr(obb, "xyxyxyxy"):
-        # xyxyxyxy: (N, 8) 배열 [x1, y1, x2, y2, x3, y3, x4, y4]
+        # xyxyxyxy:
+        #  - (N, 8)  형태: [x1, y1, x2, y2, x3, y3, x4, y4]
+        #  - (N, 4,2) 형태: [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
         xyxyxyxy = obb.xyxyxyxy.cpu().numpy()
         confs = obb.conf.cpu().numpy()
         clses = obb.cls.cpu().numpy().astype(int)
 
         for i in range(len(xyxyxyxy)):
-            x1, y1, x2, y2, x3, y3, x4, y4 = xyxyxyxy[i].tolist()
+            # 좌표를 1차원 리스트(길이 8 또는 4)로 평탄화
+            coords_flat = np.array(xyxyxyxy[i]).reshape(-1).tolist()
+
+            # 8개 좌표가 온 경우: OBB 4꼭짓점으로 사용
+            if len(coords_flat) == 8:
+                x1, y1, x2, y2, x3, y3, x4, y4 = coords_flat
+
+            # 4개 좌표만 온 경우: (x1, y1, x2, y2)를 직사각형 OBB로 확장
+            elif len(coords_flat) == 4:
+                x1, y1, x2, y2 = coords_flat
+                x3, y3 = x2, y2
+                x4, y4 = x1, y2
+
+            # 그 외 길이는 예상하지 못한 형식이므로 스킵
+            else:
+                logger.warning(
+                    f"예상치 못한 OBB 좌표 길이입니다. "
+                    f"len={len(coords_flat)}, coords={coords_flat}"
+                )
+                continue
+
             conf = float(confs[i])
             cls_idx = int(clses[i])
             label = names.get(cls_idx, str(cls_idx))
@@ -131,7 +152,6 @@ def _parse_obb_result(result) -> List[OrientedBBox]:
 
     return detections
 
-
 # ------------------------------------------
 # KickSafe 전용 위험 점수 / 위험 등급 로직
 # ------------------------------------------
@@ -140,6 +160,18 @@ def _parse_obb_result(result) -> List[OrientedBBox]:
 # 아래 RISK_WEIGHTS dict의 key는 Roboflow 데이터셋에서 설정한
 # 클래스 이름과 동일해야 합니다. (필요시 자유롭게 수정 가능)
 RISK_WEIGHTS = {
+    # === Roboflow data.yaml 의 실제 클래스 이름 ===
+    # names:
+    #   0: Patinetes electricos - v4 2023-07-28 9-05pm
+    #   1: electric-scooter
+    #
+    # → 둘 다 "전동킥보드 주행" 상황이므로
+    #   기본 위험도 10~20점 정도로 설정 (원하시면 수치는 조정 가능)
+    "Patinetes electricos - v4 2023-07-28 9-05pm": 20.0,
+    "electric-scooter": 10.0,
+
+    # === 향후 더 세분화된 데이터셋을 쓸 때를 위한 공통 카테고리(지금은 안 써도 OK) ===
+
     # 보호장비 관련
     "no_helmet": 30.0,         # 헬멧 미착용
     "helmet": 5.0,             # 헬멧 착용 (위험도 낮음)
@@ -168,6 +200,20 @@ RISK_WEIGHTS = {
     "poor_visibility": 15.0,   # 우천/안개 등 시야 불량
 }
 
+# YOLO가 내보내는 "원래 라벨명"을 KickSafe 위험 카테고리로 매핑하기 위한 별칭 맵
+# - 왼쪽: Roboflow / YOLO 결과에서 나오는 label
+# - 오른쪽: 위 RISK_WEIGHTS 딕셔너리의 key
+LABEL_ALIAS_MAP = {
+    # 현재 data.yaml 기준으로는 YOLO 라벨이 이미
+    # RISK_WEIGHTS 의 key 로 들어가 있으므로 꼭 넣지 않아도 됩니다.
+    #
+    # 필요하면 이런 식으로 별칭을 추가해서 공통 카테고리로 합칠 수 있습니다.
+    # "Patinetes electricos - v4 2023-07-28 9-05pm": "electric-scooter",
+}
+
+# RISK_WEIGHTS / LABEL_ALIAS_MAP 어디에도 없는 라벨에 사용할 기본 가중치
+DEFAULT_RISK_WEIGHT: float = 5.0
+
 
 def _risk_level_from_score(score: float) -> Tuple[str, str]:
     """
@@ -192,6 +238,8 @@ def _calculate_risk(detections: List[OrientedBBox]) -> RiskDetail:
     YOLO 검출 결과 리스트를 기반으로 KickSafe 위험 점수/등급 계산
 
     - 각 객체(label)의 위험 가중치 * 신뢰도(confidence)를 모두 합산
+    - YOLO 원래 라벨명(det.label)을 LABEL_ALIAS_MAP을 통해
+      KickSafe 위험 카테고리(RISK_WEIGHTS key)로 매핑하여 사용
     - 최대값은 settings.RISK_SCORE_MAX(기본 100)으로 클램핑
     """
     if not detections:
@@ -208,18 +256,34 @@ def _calculate_risk(detections: List[OrientedBBox]) -> RiskDetail:
     risk_factors: List[str] = []
 
     for det in detections:
-        weight = RISK_WEIGHTS.get(det.label, 5.0)  # 정의되지 않은 클래스는 기본 5점
+        # 1) YOLO가 뱉은 원본 라벨
+        raw_label = det.label
+
+        # 2) KickSafe 위험 카테고리로 매핑 (없으면 원본 라벨 그대로 사용)
+        normalized_label = LABEL_ALIAS_MAP.get(raw_label, raw_label)
+
+        # 3) 위험 가중치 조회 (없으면 DEFAULT_RISK_WEIGHT 사용)
+        weight = RISK_WEIGHTS.get(normalized_label, DEFAULT_RISK_WEIGHT)
+
+        # 4) 신뢰도와 곱해서 점수 기여도 계산
         contrib = weight * float(det.confidence)
 
         if contrib <= 0:
             continue
 
         score += contrib
+
+        # risk_factors에는 원본 라벨과 실제 사용된 카테고리 이름을 함께 남김
+        if normalized_label == raw_label:
+            factor_label = raw_label
+        else:
+            factor_label = f"{raw_label} -> {normalized_label}"
+
         risk_factors.append(
-            f"{det.label} (conf={det.confidence:.2f}) => +{contrib:.1f}점"
+            f"{factor_label} (conf={det.confidence:.2f}) => +{contrib:.1f}점"
         )
 
-    # 0 ~ 100 범위로 클램핑
+    # 0 ~ RISK_SCORE_MAX (기본 0~100) 범위로 클램핑
     score = float(np.clip(score, 0.0, float(settings.RISK_SCORE_MAX)))
     level, level_kor = _risk_level_from_score(score)
 

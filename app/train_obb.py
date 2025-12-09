@@ -11,7 +11,7 @@ from ultralytics import YOLO
 def main():
     # 1) Roboflow에서 받은 OBB 데이터셋의 YAML 파일 경로를 여기에 넣어주세요.
     #    예시: r"C:\datasets\kicksafe_obb\data.yaml"
-    data_yaml_path = r"C:\datasets\kicksafe_obb\data.yaml"
+    data_yaml_path = r"C:\kicksafe-dataset\data.yaml"
 
     # 2) 사전학습된 YOLOv8-OBB 기본 모델 로드
     #    - "yolov8n-obb.pt" 는 처음 실행 시 자동으로 다운로드됩니다.
