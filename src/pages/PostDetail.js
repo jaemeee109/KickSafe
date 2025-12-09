@@ -1,4 +1,3 @@
-// 
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/axiosConfig';
@@ -6,12 +5,11 @@ import api from '../api/axiosConfig';
 const PostDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  
   const [post, setPost] = useState(null);
-  const [currentUserId, setCurrentUserId] = useState(null); // 내 ID 저장소
+  const [currentUserId, setCurrentUserId] = useState(null);
 
+  // 1. 게시글 및 내 정보 가져오기
   useEffect(() => {
-    // 1. 게시글 정보 가져오기
     const fetchPost = async () => {
       try {
         const response = await api.get(`/posts/${id}`);
@@ -23,10 +21,8 @@ const PostDetail = () => {
       }
     };
 
-    // 2. 로그인한 내 정보(ID) 가져오기
     const fetchMyInfo = async () => {
       try {
-        // 토큰이 있을 때만 요청
         const token = localStorage.getItem('accessToken');
         if (token) {
           const response = await api.get('/members/readOne');
@@ -40,6 +36,16 @@ const PostDetail = () => {
     fetchPost();
     fetchMyInfo();
   }, [id, navigate]);
+
+  // [추가] 위험 등급별 색상 결정 함수
+  const getRiskColor = (level) => {
+    switch (level) {
+      case 'CRITICAL': return '#ff0000'; // 매우 위험 (빨강)
+      case 'HIGH': return '#ff4d4f';     // 위험 (연한 빨강)
+      case 'MEDIUM': return '#faad14';   // 주의 (주황)
+      default: return '#52c41a';         // 안전 (초록)
+    }
+  };
 
   // 삭제 핸들러
   const handleDelete = async () => {
@@ -57,15 +63,29 @@ const PostDetail = () => {
 
   if (!post) return <div style={{ textAlign: 'center', marginTop: '100px' }}>Loading...</div>;
 
-  // ★ 핵심: 내 ID와 글쓴이 ID가 같은지 확인
   const isMyPost = currentUserId === post.writerId;
 
   return (
     <div style={{ maxWidth: '800px', margin: '50px auto', padding: '20px', border: '1px solid #ddd', borderRadius: '10px' }}>
       
-      {/* 제목 및 정보 */}
+      {/* 제목 및 정보 영역 */}
       <div style={{ borderBottom: '1px solid #eee', paddingBottom: '15px', marginBottom: '20px' }}>
-        <h1 style={{ margin: '0 0 10px 0' }}>{post.title}</h1>
+        
+        {/* [추가] 위험 등급 뱃지와 제목을 나란히 배치 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+           <span style={{ 
+             backgroundColor: getRiskColor(post.riskLevel), 
+             color: 'white', 
+             padding: '5px 12px', 
+             borderRadius: '20px', 
+             fontWeight: 'bold', 
+             fontSize: '14px' 
+           }}>
+             {post.riskLevel || '분석 대기'}
+           </span>
+           <h1 style={{ margin: 0, fontSize: '24px' }}>{post.title}</h1>
+        </div>
+
         <div style={{ color: '#666', fontSize: '14px', display: 'flex', justifyContent: 'space-between' }}>
           <span>작성자: {post.writer}</span>
           <span>{new Date(post.createdAt).toLocaleString()}</span>
@@ -76,20 +96,33 @@ const PostDetail = () => {
       {post.images && post.images.length > 0 && (
         <div style={{ marginBottom: '30px' }}>
           {post.images.map((media) => (
-            <div key={media.id} style={{ marginBottom: '20px' }}>
-              {/* [수정] 타입에 따라 다르게 보여주기 */}
+            <div key={media.id} style={{ marginBottom: '30px', border: '1px solid #f0f0f0', padding: '15px', borderRadius: '10px', backgroundColor: '#fafafa' }}>
+              
+              {/* [추가] 사진별 AI 점수 표시 영역 */}
+              <div style={{ 
+                marginBottom: '10px', 
+                fontWeight: 'bold', 
+                color: getRiskColor(media.riskLevel),
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}>
+                🤖 AI 분석 결과: {media.riskScore ? media.riskScore.toFixed(1) : 0}점 
+                <span style={{ fontSize: '12px', color: '#666', fontWeight: 'normal' }}>
+                  ({media.riskLevel || 'LOW'})
+                </span>
+              </div>
+
               {media.type === 'VIDEO' ? (
-                // 동영상인 경우: video 태그 사용
                 <video 
-                  src={`http://localhost:8080${media.url}`} 
-                  controls // 재생/일시정지 바 표시
+                  src={`http://localhost:8020${media.url}`} 
+                  controls 
                   width="100%" 
                   style={{ borderRadius: '5px', maxHeight: '500px', backgroundColor: 'black' }}
                 />
               ) : (
-                // 이미지인 경우: img 태그 사용 (기존 코드)
                 <img 
-                  src={`http://localhost:8080${media.url}`} 
+                  src={`http://localhost:8020${media.url}`} 
                   alt={`img-${media.id}`} 
                   style={{ width: '100%', maxWidth: '100%', borderRadius: '5px' }}
                 />
@@ -99,12 +132,12 @@ const PostDetail = () => {
         </div>
       )}
 
-      {/* 본문 */}
+      {/* 본문 내용 */}
       <div style={{ minHeight: '200px', fontSize: '16px', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
         {post.content}
       </div>
 
-      {/* 버튼 그룹 */}
+      {/* 하단 버튼 그룹 */}
       <div style={{ marginTop: '30px', textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '10px' }}>
         <button 
           onClick={() => navigate('/post/list')}
@@ -113,7 +146,6 @@ const PostDetail = () => {
           목록으로
         </button>
 
-        {/* ★ 방어 로직: isMyPost가 true일 때만 수정/삭제 버튼 렌더링 ★ */}
         {isMyPost && (
           <>
             <button 

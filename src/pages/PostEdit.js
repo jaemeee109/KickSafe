@@ -94,7 +94,7 @@ const PostEdit = () => {
           <div style={{ display: 'flex', gap: '10px' }}>
             {existingImages.map((img) => (
               <div key={img.id} style={{ position: 'relative', width: '100px', height: '100px' }}>
-                <img src={`http://localhost:8080${img.url}`} alt="thumb" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '5px' }} />
+                <img src={`http://localhost:8020${img.url}`} alt="thumb" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '5px' }} />
                 <button type="button" onClick={() => handleDeleteExistingImage(img.id)} style={{ position: 'absolute', top: 0, right: 0, background: 'red', color: 'white', border: 'none', cursor: 'pointer' }}>X</button>
               </div>
             ))}

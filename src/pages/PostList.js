@@ -117,7 +117,7 @@ const PostList = () => {
                   ) : (
                     // 이미지면 사진 표시
                     <img 
-                      src={`http://localhost:8080${post.thumbnail}`} 
+                      src={`http://localhost:8020${post.thumbnail}`} 
                       alt="thumbnail" 
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />

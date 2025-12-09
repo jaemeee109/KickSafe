@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 const Login = () => {
   // 백엔드 주소
-  const BACKEND_URL = "http://localhost:8080";
+  const BACKEND_URL = "http://localhost:8020";
 
   // 호버 효과를 위한 상태 관리 (선택 사항: 더 디테일한 인터랙션을 위해 추가)
   const [googleHover, setGoogleHover] = useState(false);
