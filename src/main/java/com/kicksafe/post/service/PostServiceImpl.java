@@ -1,5 +1,8 @@
 package com.kicksafe.post.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper; // [필수] JSON 변환 라이브러리
+import com.kicksafe.ai.dto.AiResponseDTO;
+import com.kicksafe.ai.service.AiService;
 import com.kicksafe.global.common.image.FileStore;
 import com.kicksafe.global.common.image.UploadFileDTO;
 import com.kicksafe.global.common.paging.PageRequestDTO;
@@ -7,12 +10,10 @@ import com.kicksafe.global.common.paging.PageResponseDTO;
 import com.kicksafe.member.domain.Member;
 import com.kicksafe.member.repository.MemberRepository;
 import com.kicksafe.post.constant.MediaType;
+import com.kicksafe.post.constant.RiskLevel;
 import com.kicksafe.post.domain.Post;
 import com.kicksafe.post.domain.PostMedia;
-import com.kicksafe.post.dto.PostCreateRequestDTO;
-import com.kicksafe.post.dto.PostDetailResponseDTO;
-import com.kicksafe.post.dto.PostResponseDTO;
-import com.kicksafe.post.dto.PostUpdateRequestDTO;
+import com.kicksafe.post.dto.*;
 import com.kicksafe.post.repository.PostRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -35,6 +37,10 @@ public class PostServiceImpl implements PostService {
     private final PostRepository postRepository;
     private final MemberRepository memberRepository;
     private final FileStore fileStore; // 파일 저장을 도와주는 커스텀 클래스
+    private final AiService aiService; // AI 서비스 주입
+
+    // [★추가됨] 자바 객체(List)를 JSON 문자열로 바꿔주는 도구 주입
+    private final ObjectMapper objectMapper;
 
     /**
      * [게시글 생성 (저장)]
@@ -50,52 +56,102 @@ public class PostServiceImpl implements PostService {
      * - Cascade 옵션 덕분에 Post 만 저장해도 PostMedia 가 같이 저장됩니다.
      */
     @Override
-    @Transactional // 쓰기 작업이므로 Transactional 필수
+    @Transactional
     public Long createPost(Long memberId, PostCreateRequestDTO requestDTO) {
 
-        // 1. 작성자 찾기 (없으면 에러)
+        // 1. 작성자 찾기
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new RuntimeException("회원을 찾을 수 없습니다."));
 
-        // 2. 게시글 엔티티 생성 (아직 저장 안 함)
+        // 2. 게시글 엔티티 생성
         Post post = Post.builder()
-                .member(member)             // 작성자 연결
+                .member(member)
                 .title(requestDTO.getTitle())
                 .content(requestDTO.getContent())
-                .isDeleted(false)           // 삭제 안 됨
+                .isDeleted(false)
                 .build();
 
-        // 3. 파일 처리 (이미지가 있는 경우에만)
+        // 3. 파일 처리
         List<MultipartFile> files = requestDTO.getImages();
+
+        // 게시글 전체 평균 점수용 변수
+        double totalRiskScore = 0.0;
+        int imageCount = 0;
+        RiskLevel highestRiskLevel = RiskLevel.LOW;
 
         if (files != null && !files.isEmpty()) {
             for (MultipartFile file : files) {
                 if (file.isEmpty()) continue;
 
                 try {
-                    // (1) 실제 폴더에 파일 저장
-                    UploadFileDTO uploadFile = fileStore.storeFile(file);
-
-                    // [수정] 파일 타입 자동 감지 (이미지 vs 비디오)
-                    MediaType mediaType = MediaType.IMAGE; // 기본값
-                    String contentType = file.getContentType(); // 예: "video/mp4", "image/jpeg"
-
+                    // [순서 변경 1] 파일 타입 먼저 확인 (AI한테 보낼지 말지 결정해야 하니까)
+                    MediaType mediaType = MediaType.IMAGE;
+                    String contentType = file.getContentType();
                     if (contentType != null && contentType.startsWith("video")) {
                         mediaType = MediaType.VIDEO;
                     }
 
-                    // (2) DB에 저장할 미디어 정보 생성
+                    // [순서 변경 2] AI 분석을 ★저장하기 전에★ 먼저 수행! (중요)
+                    // (저장을 먼저 해버리면 임시 파일이 이동되면서 사라져서 에러가 남)
+                    Double riskScore = 0.0;
+                    RiskLevel riskLevel = RiskLevel.LOW;
+
+                    // [★추가] AI 감지 결과(좌표)를 저장할 변수 (JSON 문자열)
+                    String detectionJson = null;
+
+                    if (mediaType == MediaType.IMAGE) {
+                        try {
+                            // AI 서비스 호출 (이때는 아직 임시 파일이 존재함)
+                            AiResponseDTO aiResult = aiService.analyzeImage(file);
+
+                            if (aiResult != null && aiResult.getRisk() != null) {
+                                riskScore = (double) aiResult.getRisk().getRisk_score();
+                                try {
+                                    riskLevel = RiskLevel.valueOf(aiResult.getRisk().getRisk_level());
+                                } catch (IllegalArgumentException e) {
+                                    riskLevel = RiskLevel.LOW;
+                                }
+
+                                // ========================================================
+                                // [★핵심 로직] 감지된 객체 정보(List)를 JSON 문자열로 변환
+                                // ========================================================
+                                if (aiResult.getDetections() != null) {
+                                    // 예: [{x1:10, y1:20, label:"no_helmet"...}] 형태로 변환됨
+                                    detectionJson = objectMapper.writeValueAsString(aiResult.getDetections());
+                                }
+
+                                // 통계 합산
+                                totalRiskScore += riskScore;
+                                imageCount++;
+                                if (riskLevel.ordinal() > highestRiskLevel.ordinal()) {
+                                    highestRiskLevel = riskLevel;
+                                }
+                            }
+                        } catch (Exception e) {
+                            log.error("AI 분석 실패 (무시하고 저장 진행): {}", e.getMessage());
+                        }
+                    }
+
+                    // [순서 변경 3] 이제 파일 저장 (여기서 임시 파일이 이동됨)
+                    UploadFileDTO uploadFile = fileStore.storeFile(file);
+
+                    // (4) DB 엔티티 생성 및 추가
                     PostMedia postMedia = PostMedia.builder()
                             .post(post)
-                            .mediaType(mediaType) // [수정] 감지된 타입 사용
+                            .mediaType(mediaType)
                             .fileUrl(uploadFile.getFileUrl())
                             .storedFileName(uploadFile.getStoredFileName())
                             .fileSizeBytes(file.getSize())
                             .fileOrder(post.getMedias().size() + 1)
                             .isActive(true)
+                            .analyzedAt(LocalDateTime.now())
+                            .riskScore(riskScore) // 점수 저장
+                            .riskLevel(riskLevel) // 등급 저장
+
+                            // [★추가] JSON 데이터(좌표) 저장
+                            .detectionInfo(detectionJson)
                             .build();
 
-                    // (3) 추가
                     post.getMedias().add(postMedia);
 
                 } catch (IOException e) {
@@ -104,9 +160,14 @@ public class PostServiceImpl implements PostService {
             }
         }
 
-        // 4. DB에 저장 (Post 와 PostMedia 가 한 번에 저장됨)
-        Post savedPost = postRepository.save(post);
+        // 4. 게시글 전체 통계 업데이트
+        if (imageCount > 0) {
+            double avgScore = totalRiskScore / imageCount;
+            post.updateRiskInfo(avgScore, highestRiskLevel);
+        }
 
+        // 5. 최종 저장
+        Post savedPost = postRepository.save(post);
         log.info("게시글 저장 완료: ID {}", savedPost.getId());
         return savedPost.getId();
     }
@@ -127,18 +188,27 @@ public class PostServiceImpl implements PostService {
     @Override
     public PageResponseDTO<PostResponseDTO> getPostList(PageRequestDTO pageRequestDTO) {
 
-        // 1. 정렬 기준: id 내림차순 (최신순)
         Pageable pageable = pageRequestDTO.getPageable("id");
+        String type = pageRequestDTO.getType();     // 검색 타입 (t, w, tw)
+        String keyword = pageRequestDTO.getKeyword(); // 검색어
 
-        // 2. DB 조회
-        Page<Post> result = postRepository.findAll(pageable);
+        Page<Post> result;
 
-        // 3. 변환 (Post -> PostResponseDTO)
+        // 1. 검색어가 있으면 -> 검색 쿼리 실행
+        if (keyword != null && !keyword.trim().isEmpty() && type != null) {
+            result = postRepository.searchPosts(type, keyword, pageable);
+        }
+        // 2. 검색어가 없으면 -> 전체 목록 조회
+        else {
+            result = postRepository.findAll(pageable); // (삭제된 거 제외하려면 여기도 쿼리 수정 필요하지만 일단 패스)
+            // *참고: 원래 findAll 은 isDeleted=true 인 것도 가져옵니다.
+            // 완벽하게 하려면 findAllByIsDeletedFalse(pageable) 메서드를 레포지토리에 추가해서 쓰는 게 좋습니다.
+        }
+
         List<PostResponseDTO> dtoList = result.getContent().stream()
                 .map(PostResponseDTO::from)
                 .collect(Collectors.toList());
 
-        // 4. 결과 반환
         return PageResponseDTO.<PostResponseDTO>withAll()
                 .pageRequestDTO(pageRequestDTO)
                 .dtoList(dtoList)
@@ -193,32 +263,24 @@ public class PostServiceImpl implements PostService {
         }
 
         // =================================================
-        // 2. 이미지 완전 삭제 (DB + 파일)
+        // 2. 이미지 삭제 (기존 로직 동일)
         // =================================================
         List<Long> deletedMediaIds = updateDTO.getDeletedMediaIds();
-
         if (deletedMediaIds != null && !deletedMediaIds.isEmpty()) {
-            // (1) 지워야 할 이미지 객체들을 먼저 찾습니다.
             List<PostMedia> mediasToDelete = post.getMedias().stream()
                     .filter(media -> deletedMediaIds.contains(media.getId()))
                     .toList();
 
-            // (2) 찾은 이미지들을 하나씩 처리합니다.
             for (PostMedia media : mediasToDelete) {
-                // [파일 삭제] 하드디스크에서 파일 지우기
                 if (media.getStoredFileName() != null) {
                     fileStore.deleteFile(media.getStoredFileName());
                 }
             }
-
-            // (3) [DB 삭제] 게시글의 이미지 리스트에서 제거해버립니다.
-            // Post 엔티티에 'orphanRemoval = true' 가 걸려 있어서,
-            // 리스트에서 빼는 순간 DB 에서도 DELETE 쿼리가 날아가서 사라집니다.
             post.getMedias().removeAll(mediasToDelete);
         }
 
         // =================================================
-        // 3. 새 이미지 추가 (기존 로직 동일)
+        // 3. 새 이미지 추가 + AI 분석 로직
         // =================================================
         List<MultipartFile> newImages = updateDTO.getNewImages();
         if (newImages != null && !newImages.isEmpty()) {
@@ -226,34 +288,98 @@ public class PostServiceImpl implements PostService {
 
             for (MultipartFile file : newImages) {
                 if (file.isEmpty()) continue;
-                try {
-                    UploadFileDTO uploadFile = fileStore.storeFile(file);
 
-                    // [수정] 파일 타입 자동 감지
+                try {
+                    // (1) 파일 타입 확인
                     MediaType mediaType = MediaType.IMAGE;
                     String contentType = file.getContentType();
-
                     if (contentType != null && contentType.startsWith("video")) {
                         mediaType = MediaType.VIDEO;
                     }
 
+                    // (2) AI 분석
+                    Double riskScore = 0.0;
+                    RiskLevel riskLevel = RiskLevel.LOW;
+
+                    // [★추가 1] AI 감지 결과(좌표)를 저장할 변수
+                    String detectionJson = null;
+
+                    if (mediaType == MediaType.IMAGE) {
+                        try {
+                            // ★ 수정할 때도 AI한테 물어봅니다.
+                            AiResponseDTO aiResult = aiService.analyzeImage(file);
+
+                            if (aiResult != null && aiResult.getRisk() != null) {
+                                riskScore = (double) aiResult.getRisk().getRisk_score();
+                                try {
+                                    riskLevel = RiskLevel.valueOf(aiResult.getRisk().getRisk_level());
+                                } catch (IllegalArgumentException e) {
+                                    riskLevel = RiskLevel.LOW;
+                                }
+
+                                // [★추가 2] JSON 변환 로직 (createPost와 동일하게 적용)
+                                if (aiResult.getDetections() != null) {
+                                    detectionJson = objectMapper.writeValueAsString(aiResult.getDetections());
+                                }
+                            }
+                        } catch (Exception e) {
+                            log.error("수정 중 AI 분석 실패 (저장 계속 진행): {}", e.getMessage());
+                        }
+                    }
+
+                    // (3) 파일 저장
+                    UploadFileDTO uploadFile = fileStore.storeFile(file);
+
+                    // (4) DB 추가
                     PostMedia postMedia = PostMedia.builder()
                             .post(post)
-                            .mediaType(mediaType) // [수정] 감지된 타입 사용
+                            .mediaType(mediaType)
                             .fileUrl(uploadFile.getFileUrl())
                             .storedFileName(uploadFile.getStoredFileName())
                             .fileSizeBytes(file.getSize())
                             .fileOrder(++currentMediaCount)
+                            .analyzedAt(LocalDateTime.now())
                             .isActive(true)
+                            .riskScore(riskScore)
+                            .riskLevel(riskLevel)
+
+                            // [★추가 3] JSON 데이터 저장
+                            .detectionInfo(detectionJson)
                             .build();
+
                     post.getMedias().add(postMedia);
+
                 } catch (IOException e) {
                     throw new RuntimeException("파일 추가 중 오류 발생", e);
                 }
             }
         }
 
-        // 4. 내용 수정
+        // =================================================
+        // 4. [추가됨] 게시글 전체 평균 점수 & 등급 재계산
+        // (사진을 지우거나 새로 추가했으니, 평균 점수가 바뀌어야 함!)
+        // =================================================
+        double totalScore = 0.0;
+        int count = 0;
+        RiskLevel highestLevel = RiskLevel.LOW;
+
+        for (PostMedia media : post.getMedias()) {
+            if (media.getRiskScore() != null) {
+                totalScore += media.getRiskScore();
+                count++;
+            }
+            if (media.getRiskLevel() != null && media.getRiskLevel().ordinal() > highestLevel.ordinal()) {
+                highestLevel = media.getRiskLevel();
+            }
+        }
+
+        if (count > 0) {
+            post.updateRiskInfo(totalScore / count, highestLevel);
+        } else {
+            post.updateRiskInfo(0.0, RiskLevel.LOW); // 사진 다 지웠으면 0점
+        }
+
+        // 5. 텍스트 내용 수정
         post.setTitle(updateDTO.getTitle());
         post.setContent(updateDTO.getContent());
     }
@@ -293,5 +419,14 @@ public class PostServiceImpl implements PostService {
 
         // 4. [DB 삭제] 게시글 삭제 (연관된 이미지 데이터도 Cascade 로 자동 삭제됨)
         postRepository.delete(post);
+    }
+
+    /**
+     * [추가됨] 통계 조회 구현
+     * 리포지토리의 커스텀 쿼리(GROUP BY)를 실행해서 결과를 가져옵니다.
+     */
+    @Override
+    public List<StatisticsResponseDTO> getRiskStatistics() {
+        return postRepository.findRiskLevelStatistics();
     }
 }

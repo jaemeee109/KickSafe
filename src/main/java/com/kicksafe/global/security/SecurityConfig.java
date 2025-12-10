@@ -6,6 +6,7 @@ import com.kicksafe.auth.service.CustomOAuth2UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -88,7 +89,13 @@ public class SecurityConfig {
                         // 1. "누구나 들어와도 되는 곳" (로그인, 소셜연동, 이미지, 에러페이지)
                         // "/oauth2/**"가 있어야 구글/카카오 로그인이 작동합니다.
                         .requestMatchers("/auth/**", "/error", "/images/**", "/login/**", "/oauth2/**").permitAll()
-
+                        .requestMatchers(HttpMethod.GET, "/posts/**").permitAll()
+                        // =========================================================
+                        // [★추가★] 관리자 페이지 보안 설정
+                        // "/admin"으로 시작하는 모든 주소는 DB의 ROLE 이 "ADMIN"인 사람만 가능
+                        // (스프링 시큐리티가 자동으로 "ROLE_ADMIN"인지 검사합니다)
+                        // =========================================================
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
                         // 2. 그 외 모든 곳은 "출입증(토큰)"이 있어야 함
                         .anyRequest().authenticated())
 

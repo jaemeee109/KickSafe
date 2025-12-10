@@ -2,10 +2,9 @@ package com.kicksafe.post.service;
 
 import com.kicksafe.global.common.paging.PageRequestDTO;
 import com.kicksafe.global.common.paging.PageResponseDTO;
-import com.kicksafe.post.dto.PostCreateRequestDTO;
-import com.kicksafe.post.dto.PostDetailResponseDTO;
-import com.kicksafe.post.dto.PostResponseDTO;
-import com.kicksafe.post.dto.PostUpdateRequestDTO;
+import com.kicksafe.post.dto.*;
+
+import java.util.List;
 
 public interface PostService {
 
@@ -41,4 +40,10 @@ public interface PostService {
      * 작성자 본인인지 확인하고, 게시글과 연관된 이미지를 모두 삭제합니다.
      */
     void deletePost(Long memberId, Long postId);
+
+    /**
+     * [추가됨] 통계 조회
+     * 위험 등급별 게시글 개수를 반환합니다.
+     */
+    List<StatisticsResponseDTO> getRiskStatistics();
 }

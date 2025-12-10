@@ -1,6 +1,7 @@
 package com.kicksafe.global.error;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.catalina.connector.ClientAbortException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -72,5 +73,16 @@ public class GlobalExceptionHandler {
                 "Internal Server Error",
                 "서버 내부 오류가 발생했습니다. 관리자에게 문의하세요."
         );
+    }
+
+    /**
+     * [추가됨] ClientAbortException 처리
+     * 원인: 동영상 스트리밍 중 사용자가 재생을 멈추거나 페이지를 이탈하면 발생
+     * 해결: 에러가 아니라 자연스러운 현상이므로, 로그만 남기고 무시(return null)합니다.
+     */
+    @ExceptionHandler(ClientAbortException.class)
+    public void handleClientAbortException(ClientAbortException e) {
+        // 클라이언트가 연결을 끊었으므로 응답을 보낼 필요가 없음
+        log.debug("사용자가 연결을 중단했습니다 (동영상/이미지 로딩 중단): {}", e.getMessage());
     }
 }

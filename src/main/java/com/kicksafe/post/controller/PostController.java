@@ -3,10 +3,7 @@ package com.kicksafe.post.controller;
 import com.kicksafe.global.common.paging.PageRequestDTO;
 import com.kicksafe.global.common.paging.PageResponseDTO;
 import com.kicksafe.global.security.UserPrincipal;
-import com.kicksafe.post.dto.PostCreateRequestDTO;
-import com.kicksafe.post.dto.PostDetailResponseDTO;
-import com.kicksafe.post.dto.PostResponseDTO;
-import com.kicksafe.post.dto.PostUpdateRequestDTO;
+import com.kicksafe.post.dto.*;
 import com.kicksafe.post.service.PostService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +11,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @Slf4j
 @RestController
@@ -31,14 +30,15 @@ public class PostController {
      * 설명: 제목, 내용, 이미지 파일을 받아 게시글을 등록합니다.
      */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<String> createPost(
-            @AuthenticationPrincipal UserPrincipal userPrincipal,
-            @ModelAttribute PostCreateRequestDTO requestDTO) {
+    public ResponseEntity<Long> createPost( // [수정] 반환 타입 String -> Long
+                                            @AuthenticationPrincipal UserPrincipal userPrincipal,
+                                            @ModelAttribute PostCreateRequestDTO requestDTO) {
 
-        log.info("게시글 작성 요청 - 사용자 ID: {}", userPrincipal.getId());
+        // Service 는 이미 저장된 ID(Long)를 리턴하고 있었습니다.
         Long postId = postService.createPost(userPrincipal.getId(), requestDTO);
 
-        return ResponseEntity.ok("게시글이 성공적으로 등록되었습니다. ID: " + postId);
+        // [수정] 생성된 ID를 프론트엔드로 보냅니다.
+        return ResponseEntity.ok(postId);
     }
 
     /**
@@ -100,5 +100,16 @@ public class PostController {
         postService.deletePost(userPrincipal.getId(), postId);
 
         return ResponseEntity.ok("게시글이 완전히 삭제되었습니다.");
+    }
+
+    /**
+     * [추가됨] 통계 조회 API
+     * URL: GET /posts/statistics
+     * 설명: 등급별 신고 건수를 반환합니다. (차트 그리기용)
+     */
+    @GetMapping("/statistics")
+    public ResponseEntity<List<StatisticsResponseDTO>> getStatistics() {
+        log.info("통계 데이터 조회 요청");
+        return ResponseEntity.ok(postService.getRiskStatistics());
     }
 }

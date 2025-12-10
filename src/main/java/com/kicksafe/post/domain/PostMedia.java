@@ -58,6 +58,9 @@ public class PostMedia extends BaseEntity {
     @Column(name = "RISK_LEVEL")
     private RiskLevel riskLevel;
 
+    @Column(name = "DETECTION_INFO", columnDefinition = "TEXT")
+    private String detectionInfo;
+
     @Column(name = "ANALYZED_AT")
     private LocalDateTime analyzedAt;
 

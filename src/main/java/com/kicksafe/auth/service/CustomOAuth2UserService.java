@@ -91,6 +91,16 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                         "탈퇴한 회원입니다. 재가입이 불가능합니다."
                 );
             }
+            // =========================================================
+            // [★추가됨] (2) 정지(블랙리스트) 회원 체크
+            // =========================================================
+            if (member.getStatus() == MemberStatus.BLACKLISTED) {
+                throw new OAuth2AuthenticationException(
+                        new OAuth2Error("BLACKLISTED_MEMBER"),
+                        "정지된 계정입니다. 관리자에게 문의하세요."
+                );
+            }
+
         }
 
         // 5. [비즈니스 로직] 통과한 사람만 우리 DB에 저장하거나 업데이트

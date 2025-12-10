@@ -34,6 +34,13 @@ public class CustomUserDetailsService implements UserDetailsService {
             throw new UsernameNotFoundException("탈퇴한 회원입니다. 재가입이 불가능합니다.");
         }
 
+        // =========================================================
+        // [★추가됨] 정지 체크
+        // =========================================================
+        if (member.getStatus() == MemberStatus.BLACKLISTED) {
+            throw new UsernameNotFoundException("정지된 회원입니다. 로그인이 제한됩니다.");
+        }
+
         return UserPrincipal.create(member);
     }
 
@@ -45,6 +52,13 @@ public class CustomUserDetailsService implements UserDetailsService {
         // 여기도 똑같이 철벽 방어
         if (member.getStatus() == MemberStatus.WITHDRAWN) {
             throw new UsernameNotFoundException("탈퇴한 회원입니다. 재가입이 불가능합니다.");
+        }
+
+        // =========================================================
+        // [★추가됨] 정지 체크
+        // =========================================================
+        if (member.getStatus() == MemberStatus.BLACKLISTED) {
+            throw new UsernameNotFoundException("정지된 회원입니다. 로그인이 제한됩니다.");
         }
 
         return UserPrincipal.create(member);

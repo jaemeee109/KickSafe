@@ -16,12 +16,18 @@ public class MemberResponseDTO {
     private String email;     // providerUserId (소셜 ID)
     private String nickname;
     private String role;
-    private String profileImage; // 나중에 프로필 이미지 URL 이 있다면 추가
+
+    // [★추가됨] 회원 상태 (ACTIVE, BLACKLISTED, WITHDRAWN)
+    private String status;
 
     // Member 엔티티를 DTO 로 변환하는 정적 메서드 (팩토리 메서드 패턴)
     public static MemberResponseDTO from(Member member) {
-        return MemberResponseDTO.builder().id(member.getId()).email(member.getProviderUserId()) // 우리는 이메일 대신 이걸 식별자로 씀
-                .nickname(member.getNickname()).role(member.getRole().name()) // Enum -> String 변환
+        return MemberResponseDTO.builder()
+                .id(member.getId())
+                .email(member.getProviderUserId())
+                .nickname(member.getNickname())
+                .role(member.getRole().name())
+                .status(member.getStatus().name())
                 .build();
     }
 }
