@@ -1,32 +1,64 @@
-// 
-import React from 'react';
+/*
+ * ==================================================================================
+ * [React 컴포넌트: 헤더 (Header.js)]
+ * ----------------------------------------------------------------------------------
+ * 수정 내용 : 
+ * 1. 로그인 시 내 정보(닉네임, 권한) 불러오기
+ * 2. 상단에 "관리자 / 홍길동님" 표시
+ * 3. 관리자일 경우 '⚙️ 관리' 버튼 표시
+ * ==================================================================================
+ */
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import api from '../api/axiosConfig'; // 우리가 만든 백엔드 통신 도구
+import api from '../api/axiosConfig'; // 백엔드 통신 도구
 
 const Header = () => {
   const navigate = useNavigate();
   
-  // 1. 현재 브라우저에 토큰이 있는지 확인 (로그인 여부 체크)
+  // 1. 로그인 여부 체크
   const isLogin = !!localStorage.getItem('accessToken');
+  
+  // 2. 내 정보(닉네임, 권한)를 저장할 상태
+  const [myInfo, setMyInfo] = useState(null);
 
-  // 2. 로그아웃 버튼을 눌렀을 때 실행될 함수
+  // 3. [추가] 로그인 상태라면, 백엔드에서 내 정보를 가져옴
+  useEffect(() => {
+    const fetchMyInfo = async () => {
+      if (!isLogin) return; // 로그인 안 했으면 스킵
+
+      try {
+        // [수정] 오타 제거 후 정상 코드
+        const response = await api.get('/members/readOne'); // 내 정보 조회 API
+        setMyInfo(response.data);
+      } catch (error) {
+        console.error("내 정보 로딩 실패 (토큰 만료 등):", error);
+        // 에러 나면 조용히 로그아웃 처리하거나 무시
+      }
+    };
+
+    fetchMyInfo();
+  }, [isLogin]);
+
+  // 4. 로그아웃 핸들러
   const handleLogout = async () => {
     try {
-      // (1) 백엔드에 로그아웃 요청
       await api.post('/auth/logout'); 
     } catch (error) {
-      console.error("로그아웃 처리 중 에러 발생 (무시하고 진행)");
+      console.error("로그아웃 에러 (무시)");
     } finally {
-      // (2) 프론트엔드에서 토큰 삭제
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
-      
       alert("로그아웃 되었습니다.");
-      
-      // (3) 메인 화면으로 이동하면서 새로고침
       navigate('/');
       window.location.reload(); 
     }
+  };
+
+  // 권한을 한글로 변환하는 헬퍼 함수
+  const getRoleName = (role) => {
+    if (role === 'ADMIN') return '관리자';
+    if (role === 'USER') return '회원';
+    return '게스트';
   };
 
   return (
@@ -38,31 +70,57 @@ const Header = () => {
       backgroundColor: '#f8f9fa',
       borderBottom: '1px solid #ddd'
     }}>
-      {/* 왼쪽: 로고 (누르면 홈으로) */}
+      {/* 로고 */}
       <Link to="/" style={{ textDecoration: 'none', color: 'black', fontWeight: 'bold', fontSize: '20px' }}>
         🚔 KickSafe
       </Link>
 
-      {/* 오른쪽: 메뉴 버튼들 */}
-      <div>
-        {/* [추가됨] 게시판 바로가기 버튼 (항상 보임) */}
-        <Link to="/post/list" style={{ marginRight: '15px', textDecoration: 'none', color: '#333', fontWeight: 'bold' }}>
+      {/* 오른쪽 메뉴 영역 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+        
+        {/* [추가] 로그인 정보 표시 (로그인 했을 때만 보임) */}
+        {isLogin && myInfo && (
+          <span style={{ fontSize: '14px', marginRight: '10px', color: '#555' }}>
+            {myInfo.role === 'ADMIN' ? '👮‍♂️' : '👤'} 
+            <span style={{ fontWeight: 'bold', color: myInfo.role === 'ADMIN' ? '#ff4d4f' : '#333' }}>
+              {' '}{getRoleName(myInfo.role)}
+            </span>
+            {' / '}
+            <span style={{ fontWeight: 'bold' }}>{myInfo.nickname}</span>님
+          </span>
+        )}
+
+        {/* 통계 버튼 */}
+        <Link to="/statistics" style={{ textDecoration: 'none', color: '#333', fontWeight: 'bold' }}>
+          📊 통계
+        </Link>
+
+        {/* 게시판 버튼 */}
+        <Link to="/post/list" style={{ textDecoration: 'none', color: '#333', fontWeight: 'bold' }}>
           게시판
         </Link>
 
+        {/* 관리자 전용 버튼 (ADMIN일 때만 보임) */}
+        {isLogin && myInfo && myInfo.role === 'ADMIN' && (
+           <Link to="/admin/members" style={{ textDecoration: 'none', color: '#d9363e', fontWeight: 'bold' }}>
+             ⚙️ 관리
+           </Link>
+        )}
+
+        {/* 로그인 상태에 따른 버튼 노출 */}
         {isLogin ? (
           <>
-            {/* [수정] 내 정보 버튼을 Link로 감싸거나 onClick으로 이동 */}
             <Link to="/mypage">
-              <button style={{ marginRight: '10px', cursor: 'pointer' }}>내 정보</button>
+              <button style={{ cursor: 'pointer', padding: '5px 10px' }}>내 정보</button>
             </Link>
             
-            <button onClick={handleLogout} style={{ cursor: 'pointer' }}>로그아웃</button>
+            <button onClick={handleLogout} style={{ cursor: 'pointer', padding: '5px 10px' }}>로그아웃</button>
           </>
         ) : (
-          // 로그인 안 했을 때 보여줄 버튼
           <Link to="/login">
-            <button>로그인</button>
+            <button style={{ padding: '5px 10px', backgroundColor: '#1890ff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+              로그인
+            </button>
           </Link>
         )}
       </div>
