@@ -29,6 +29,8 @@ def main():
         imgsz=640,
         epochs=100,
         batch=16,
+        device=0,  # ← 0번 GPU 사용 ("cuda:0"과 동일)
+        workers=0,  # ← 윈도우에서 DataLoader 멀티프로세싱 비활성화
     )
 
     print("===> YOLOv8-OBB 학습이 완료되었습니다.")
