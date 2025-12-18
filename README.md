@@ -19,10 +19,10 @@
 <p/>=============================================
 <p/>
 <p/><b>기술스택</b> :
-<p/><b>- Backend</b> : SpringBoot(RestAPI),Spring Security, JWT, JPA, MariaDB, AWS/Docker
-<p/><b>- AI</b> :  Python(FastAPI), Roboflow Object Detection Model, 위험도 스코어링 로직
-<p/><b>- Frontend</b> : React
-<p/>
+<p/><b>- Backend</b> : SpringBoot(API Server),Spring Security, JWT, JPA, MariaDB
+<p/><b>- AI</b> :  FastAPI
+<p/><b>- Frontend</b> : React · Bootstrap
+<p/><b>- Deployment</b> : Google Cloud Flatform
 <p/>=============================================
 <p/>
 <p/><b>시스템 구조</b> :
@@ -36,7 +36,7 @@
 <p/>   │
 <p/>   ├── Axios 요청 (JWT 포함)
 <p/>   ▼
-<p/><b>Spring Boot (REST API + Security)</b>b>
+<p/><b>Spring Boot (API Server + Security)</b>b>
 <p/>   │  ├─ 소셜 로그인(OAuth2) 처리
 <p/>   │  │    - 카카오 / 구글 / 네이버 / 인스타 OAuth2 연동
 <p/>   │  │    - 최초 로그인 시 회원 정보 자동 생성(소셜회원가입)
@@ -58,7 +58,7 @@
 <p/>
 <p/><b>FastAPI (Python)</b>b>
 <p/>   │
-<p/>   └─ Roboflow 모델로 이미지/영상 분석 → 위험 점수 반환
+<p/>   └─ Roboflow YOLOv8 모델로 이미지/영상 분석 → 위험 점수 반환
 <p/>      (Spring Boot에서 AI 서버 호출 후 결과를 게시물에 저장/표시)
 <p/>=============================================
 <p/>
