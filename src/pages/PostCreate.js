@@ -1,11 +1,10 @@
 /*
  * ==================================================================================
- * [React 페이지: 게시글 작성 (PostCreate.js)]
+ * [React 페이지: 게시글 등록 (PostCreate.js)]
  * ----------------------------------------------------------------------------------
- * 기능 설명 : 
- * 1. 제목, 내용, 미디어 파일(이미지/동영상)을 입력받아 서버로 전송합니다.
- * 2. [UX 개선] 업로드 진행률(Progress Bar)을 표시하여 사용자를 안심시킵니다.
- * 3. [UX 개선] 작성 완료 후, 목록이 아닌 '방금 작성한 글의 상세 페이지'로 이동합니다.
+ * [수정 완료] 백엔드 @ModelAttribute 방식에 맞춰 FormData 전송 방식 변경
+ * 1. JSON으로 묶지 않고, formData.append('title', ...), formData.append('content', ...) 로 직접 넣음.
+ * 2. 장소/일시 정보를 'content' 문자열 맨 앞에 합쳐서 전송.
  * ==================================================================================
  */
 import React, { useState } from 'react';
@@ -14,151 +13,120 @@ import api from '../api/axiosConfig';
 
 const PostCreate = () => {
   const navigate = useNavigate();
-
-  // 입력 필드 상태 관리
+  
+  // 상태 관리
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [location, setLocation] = useState(''); // 장소
+  const [takenAt, setTakenAt] = useState('');   // 일시
   const [files, setFiles] = useState([]);
-  
-  // 로딩 및 업로드 상태 관리
-  const [isLoading, setIsLoading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0); // 0 ~ 100%
 
-  // 파일 선택 핸들러
+  // 파일 선택
   const handleFileChange = (e) => {
     setFiles(Array.from(e.target.files));
   };
 
-  // 폼 제출 핸들러
+  // 제출 핸들러
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isLoading) return; // 이미 전송 중이면 중복 클릭 방지
 
-    setIsLoading(true);
-    setUploadProgress(0); // 진행률 초기화
+    // 1. [꼼수] 장소와 일시를 본문(content)과 합치기
+    let finalContent = content;
+    if (location || takenAt) {
+        const infoPrefix = `📍 촬영 장소: ${location || '미입력'}\n📅 촬영 일시: ${takenAt || '미입력'}\n\n--------------------------------\n\n`;
+        finalContent = infoPrefix + content;
+    }
 
-    // FormData 생성 (파일 전송 시 필수)
+    // 2. FormData 생성
     const formData = new FormData();
+
+    // [중요] @ModelAttribute는 데이터를 각각 따로 넣어줘야 합니다!
+    // 백엔드 DTO 필드명과 정확히 일치해야 함 (title, content, images)
     formData.append("title", title);
-    formData.append("content", content);
+    formData.append("content", finalContent); 
+
+    // 이미지는 여러 장일 수 있으므로 반복문으로 추가
     files.forEach((file) => {
       formData.append("images", file);
     });
 
     try {
-      // 1. 백엔드 API 호출
-      const response = await api.post('/posts', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        // [핵심 설정] 대용량 파일 업로드 시 타임아웃 방지 (무제한)
-        timeout: 1800000, 
-        
-        // [UX] 업로드 진행률 계산 (Axios 제공 기능)
-        onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(percentCompleted);
-        },
+      // 3. 전송
+      await api.post('/posts', formData, {
+        headers: { 
+            // Axios가 FormData를 감지하면 자동으로 Content-Type을 설정하지만,
+            // 명시적으로 적어주어도 무방합니다.
+            'Content-Type': 'multipart/form-data' 
+        }
       });
-
-      // 2. [★수정됨] 성공 후 처리 로직 변경
-      // 백엔드(PostController)가 생성된 게시글의 ID(Long)를 반환해줍니다.
-      const newPostId = response.data; 
-
-      alert("신고 접수가 완료되었습니다!");
-      
-      // 3. [★수정됨] 목록이 아니라, 방금 작성한 '상세 페이지'로 이동
-      navigate(`/post/${newPostId}`);
-
+      alert("등록되었습니다!");
+      navigate('/post/list');
     } catch (error) {
-      console.error("글 작성 실패:", error);
-      
-      // 에러 메시지 사용자에게 알림
-      if (error.code === 'ECONNABORTED') {
-        alert("업로드 시간이 초과되었습니다. 네트워크 상태를 확인해주세요.");
-      } else {
-        alert("글 작성 중 오류가 발생했습니다.\n(서버 연결 문제 혹은 파일 용량 초과)");
-      }
-    } finally {
-      setIsLoading(false);
+      console.error("등록 실패:", error);
+      alert("글 등록 중 오류가 발생했습니다.");
     }
   };
 
   return (
-    <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px', border: '1px solid #ddd', borderRadius: '10px' }}>
-      <h2 style={{ textAlign: 'center' }}>🚨 안전신고 작성</h2>
-      
+    <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px' }}>
+      <h1>새 게시글 작성</h1>
       <form onSubmit={handleSubmit}>
-        {/* 제목 입력 */}
+        
+        {/* 제목 */}
         <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', fontWeight: 'bold' }}>제목</label>
+          <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>제목</label>
           <input 
             type="text" 
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
-            required
-            placeholder="위험 상황을 요약해주세요"
+            value={title} 
+            onChange={(e) => setTitle(e.target.value)} 
+            style={{ width: '100%', padding: '10px', borderRadius:'5px', border:'1px solid #ddd' }}
+            required 
           />
         </div>
 
-        {/* 내용 입력 */}
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', fontWeight: 'bold' }}>내용</label>
-          <textarea 
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            style={{ width: '100%', height: '150px', padding: '10px', boxSizing: 'border-box' }}
-            required
-            placeholder="상세한 위치와 상황을 설명해주세요"
-          />
-        </div>
-
-        {/* 파일 첨부 */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', fontWeight: 'bold' }}>파일 첨부 (이미지/동영상)</label>
+        {/* 장소 입력 (선택) */}
+        <div style={{ marginBottom: '15px', padding:'15px', backgroundColor:'#f9f9f9', borderRadius:'8px' }}>
+          <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>📍 촬영 장소 (선택)</label>
           <input 
-            type="file" 
-            multiple 
-            accept="image/*,video/*" 
-            onChange={handleFileChange}
+            type="text" 
+            value={location} 
+            onChange={(e) => setLocation(e.target.value)} 
+            placeholder="예: 강남역 1번 출구"
+            style={{ width: '100%', padding: '10px', borderRadius:'5px', border:'1px solid #ddd' }}
           />
-          {files.length > 0 && <p style={{ fontSize: '12px', color: 'blue' }}>📸 {files.length}개 파일 선택됨</p>}
         </div>
 
-        {/* [UX] 업로드 진행바 (로딩 중일 때만 보임) */}
-        {isLoading && (
-          <div style={{ marginBottom: '20px' }}>
-            <div style={{ width: '100%', backgroundColor: '#e0e0e0', borderRadius: '5px', overflow: 'hidden' }}>
-              <div style={{ 
-                width: `${uploadProgress}%`, 
-                backgroundColor: '#1890ff', 
-                height: '10px', 
-                transition: 'width 0.2s' 
-              }}></div>
-            </div>
-            <p style={{ textAlign: 'center', fontSize: '12px', margin: '5px 0' }}>
-              AI가 분석 중입니다... {uploadProgress}% (창을 닫지 마세요)
-            </p>
-          </div>
-        )}
+        {/* 일시 입력 (선택) */}
+        <div style={{ marginBottom: '15px', padding:'15px', backgroundColor:'#f9f9f9', borderRadius:'8px' }}>
+          <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>📅 촬영 일시 (선택)</label>
+          <input 
+            type="datetime-local" 
+            value={takenAt} 
+            onChange={(e) => setTakenAt(e.target.value)} 
+            style={{ width: '100%', padding: '10px', borderRadius:'5px', border:'1px solid #ddd' }}
+          />
+        </div>
 
-        {/* 제출 버튼 */}
-        <button 
-          type="submit"
-          disabled={isLoading}
-          style={{ 
-            width: '100%', 
-            padding: '15px', 
-            backgroundColor: isLoading ? '#ccc' : '#ff4d4f', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '5px', 
-            fontWeight: 'bold', 
-            cursor: isLoading ? 'not-allowed' : 'pointer' 
-          }}
-        >
-          {isLoading ? "분석 및 전송 중..." : "신고하기"}
+        {/* 내용 */}
+        <div style={{ marginBottom: '15px' }}>
+          <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>내용</label>
+          <textarea 
+            value={content} 
+            onChange={(e) => setContent(e.target.value)} 
+            placeholder="내용을 입력하세요..."
+            style={{ width: '100%', height: '200px', padding: '10px', borderRadius:'5px', border:'1px solid #ddd' }}
+            required
+          />
+        </div>
+
+        {/* 파일 업로드 */}
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>사진 첨부</label>
+          <input type="file" multiple onChange={handleFileChange} />
+        </div>
+
+        <button type="submit" style={{ width:'100%', padding: '15px', backgroundColor: '#1890ff', color: 'white', border: 'none', borderRadius:'5px', fontSize:'16px', fontWeight:'bold', cursor:'pointer' }}>
+          등록하기
         </button>
       </form>
     </div>

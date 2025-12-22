@@ -1,113 +1,186 @@
-// 
+/*
+ * ==================================================================================
+ * [React 페이지: 게시글 수정 (PostEdit.js)]
+ * ----------------------------------------------------------------------------------
+ * 기능 설명 : 
+ * 1. 기존 게시글 정보(제목, 내용, 이미지)를 불러와 표시합니다.
+ * 2. [이미지 삭제] 기존 이미지의 'X' 버튼 클릭 시 삭제 목록에 추가합니다.
+ * 3. [이미지 추가] 새 파일을 첨부할 수 있습니다.
+ * 4. [내용 수정] 장소/일시가 포함된 전체 텍스트를 수정합니다.
+ * 5. [완료 후 이동] 수정이 성공하면 '상세 페이지(/post/글번호)'로 이동합니다.
+ * ==================================================================================
+ */
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/axiosConfig';
 
 const PostEdit = () => {
-  const { id } = useParams();
+  const { id } = useParams(); // URL에서 글 번호 가져오기
   const navigate = useNavigate();
 
+  // 입력값 상태
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [existingImages, setExistingImages] = useState([]); 
-  const [deletedMediaIds, setDeletedMediaIds] = useState([]); 
-  const [newFiles, setNewFiles] = useState([]); 
+  
+  // 이미지 관리 상태
+  const [existingImages, setExistingImages] = useState([]); // 화면에 보여줄 기존 이미지
+  const [deletedMediaIds, setDeletedMediaIds] = useState([]); // 삭제할 이미지 ID 목록
+  const [newFiles, setNewFiles] = useState([]); // 새로 추가할 파일 객체들
 
+  // 1. 초기 데이터 로딩
   useEffect(() => {
-    const fetchPostAndCheckPermission = async () => {
+    const fetchPost = async () => {
       try {
-        // 1. 게시글 정보 조회
-        const postResponse = await api.get(`/posts/${id}`);
-        const post = postResponse.data;
+        const response = await api.get('/posts/' + id); // 문자열 연결 사용
+        const data = response.data;
+        
+        setTitle(data.title);
+        setContent(data.content);
 
-        // 2. 내 정보 조회
-        const userResponse = await api.get('/members/readOne');
-        const myId = userResponse.data.id;
-
-        // ★ 핵심 방어 로직: ID 불일치 시 강제 퇴장
-        if (post.writerId !== myId) {
-          alert("수정 권한이 없습니다. (본인의 글만 수정 가능합니다)");
-          navigate(-1); // 뒤로 가기
-          return;       // 함수 즉시 종료
+        // 기존 이미지가 있다면 상태에 저장
+        if (data.images && Array.isArray(data.images)) {
+          setExistingImages(data.images);
         }
-
-        // 3. 권한 있으면 데이터 채우기
-        setTitle(post.title);
-        setContent(post.content);
-        setExistingImages(post.images || []); 
-
       } catch (error) {
         console.error("데이터 로딩 실패:", error);
-        alert("접근 권한이 없거나 오류가 발생했습니다.");
+        alert("게시글 정보를 불러올 수 없습니다.");
         navigate('/post/list');
       }
     };
-
-    fetchPostAndCheckPermission();
+    fetchPost();
   }, [id, navigate]);
 
-  // ... (아래 삭제/파일추가/제출 로직은 기존과 동일)
-  const handleDeleteExistingImage = (imageId) => {
-    setExistingImages(existingImages.filter(img => img.id !== imageId));
+  // 2. 기존 이미지 삭제 핸들러
+  const handleDeleteExisting = (imageId) => {
+    if (!window.confirm("이 이미지를 삭제하시겠습니까? (수정 완료 시 반영됩니다)")) return;
+
+    // 삭제할 ID 목록에 추가
     setDeletedMediaIds([...deletedMediaIds, imageId]);
+    
+    // 화면 목록에서 즉시 제거 (사용자 경험용)
+    setExistingImages(existingImages.filter(img => img.id !== imageId));
   };
 
+  // 3. 새 파일 선택 핸들러
   const handleFileChange = (e) => {
     setNewFiles(Array.from(e.target.files));
   };
 
+  // 4. 수정 완료 제출 핸들러
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     const formData = new FormData();
+
+    // 4-1. 텍스트 데이터 (백엔드 @ModelAttribute 대응)
     formData.append("title", title);
     formData.append("content", content);
-    deletedMediaIds.forEach(id => formData.append("deletedMediaIds", id));
-    newFiles.forEach(file => formData.append("newImages", file));
+
+    // 4-2. 삭제할 이미지 ID (여러 개일 경우 반복해서 append)
+    deletedMediaIds.forEach((delId) => {
+      formData.append("deletedMediaIds", delId);
+    });
+
+    // 4-3. 새 이미지 파일 (여러 개일 경우 반복해서 append)
+    // 주의: 백엔드에서 받는 이름이 'newImages' 여야 합니다.
+    newFiles.forEach((file) => {
+      formData.append("newImages", file);
+    });
 
     try {
-      await api.put(`/posts/${id}`, formData, {
+      // PUT 요청 전송
+      await api.put('/posts/' + id, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      alert("수정이 완료되었습니다!");
-      navigate(`/post/${id}`);
+      
+      alert("수정되었습니다!");
+
+      // [중요] 상세 페이지로 이동
+      // 문자열 연결(+)을 사용하여 경로 오류 방지
+      navigate('/post/' + id);
+
     } catch (error) {
       console.error("수정 실패:", error);
-      alert("글 수정에 실패했습니다.");
+      alert("수정 중 오류가 발생했습니다.");
     }
   };
 
   return (
-    <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px', border: '1px solid #ddd', borderRadius: '10px' }}>
-      <h2 style={{ textAlign: 'center' }}>✏️ 게시글 수정</h2>
+    <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px' }}>
+      <h1>게시글 수정</h1>
       <form onSubmit={handleSubmit}>
+        
+        {/* 제목 입력 */}
         <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', fontWeight: 'bold' }}>제목</label>
-          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: '100%', padding: '10px' }} required />
+          <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>제목</label>
+          <input 
+            type="text" 
+            value={title} 
+            onChange={(e) => setTitle(e.target.value)} 
+            style={{ width: '100%', padding: '10px', borderRadius:'5px', border:'1px solid #ddd' }}
+            required 
+          />
         </div>
+
+        {/* 내용 입력 */}
         <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', fontWeight: 'bold' }}>내용</label>
-          <textarea value={content} onChange={(e) => setContent(e.target.value)} style={{ width: '100%', height: '150px', padding: '10px' }} required />
+          <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>내용</label>
+          <textarea 
+            value={content} 
+            onChange={(e) => setContent(e.target.value)} 
+            style={{ width: '100%', height: '300px', padding: '10px', borderRadius:'5px', border:'1px solid #ddd', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}
+            required
+          />
+          <p style={{fontSize:'12px', color:'#888', marginTop:'5px'}}>
+            * 장소와 일시 정보는 위 내용 칸에서 직접 수정해주세요.
+          </p>
         </div>
-        {/* 기존 이미지 영역 */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', fontWeight: 'bold' }}>기존 사진</label>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            {existingImages.map((img) => (
-              <div key={img.id} style={{ position: 'relative', width: '100px', height: '100px' }}>
-                <img src={`http://localhost:8020${img.url}`} alt="thumb" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '5px' }} />
-                <button type="button" onClick={() => handleDeleteExistingImage(img.id)} style={{ position: 'absolute', top: 0, right: 0, background: 'red', color: 'white', border: 'none', cursor: 'pointer' }}>X</button>
-              </div>
-            ))}
+
+        {/* 기존 이미지 목록 (삭제 기능 포함) */}
+        {existingImages.length > 0 && (
+          <div style={{ marginBottom: '20px', padding: '10px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+            <label style={{display:'block', marginBottom:'10px', fontWeight:'bold'}}>기존 이미지 삭제</label>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              {existingImages.map((img) => (
+                <div key={img.id} style={{ position: 'relative', width: '100px' }}>
+                  <img 
+                    src={`http://34.50.13.223.nip.io:8020${img.url}`} 
+                    alt="existing" 
+                    style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '5px' }}
+                  />
+                  {/* 삭제 버튼 */}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteExisting(img.id)}
+                    style={{
+                      position: 'absolute', top: '-5px', right: '-5px',
+                      backgroundColor: 'red', color: 'white', border: 'none',
+                      borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer',
+                      fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-        {/* 새 파일 영역 */}
+        )}
+
+        {/* 새 이미지 추가 */}
         <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', fontWeight: 'bold' }}>새 사진 추가</label>
-          <input type="file" multiple accept="image/*" onChange={handleFileChange} />
+          <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>새 이미지 추가</label>
+          <input type="file" multiple onChange={handleFileChange} />
         </div>
+
+        {/* 버튼 영역 */}
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button type="submit" style={{ flex: 1, padding: '15px', background: '#1890ff', color: 'white', border: 'none', borderRadius: '5px' }}>수정 완료</button>
-          <button type="button" onClick={() => navigate(-1)} style={{ flex: 1, padding: '15px', background: '#ccc', border: 'none', borderRadius: '5px' }}>취소</button>
+            <button type="submit" style={{ flex: 1, padding: '15px', backgroundColor: '#1890ff', color: 'white', border: 'none', borderRadius:'5px', fontSize:'16px', fontWeight:'bold', cursor:'pointer' }}>
+              수정 완료
+            </button>
+            <button type="button" onClick={() => navigate('/post/' + id)} style={{ flex: 1, padding: '15px', backgroundColor: '#ddd', color: '#333', border: 'none', borderRadius:'5px', fontSize:'16px', fontWeight:'bold', cursor:'pointer' }}>
+              취소
+            </button>
         </div>
       </form>
     </div>

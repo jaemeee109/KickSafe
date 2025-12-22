@@ -11,7 +11,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const Login = () => {
-  const BACKEND_URL = "http://localhost:8020";
+  const BACKEND_URL = "http://34.50.13.223.nip.io:8020";
   const [googleHover, setGoogleHover] = useState(false);
   
   const location = useLocation();

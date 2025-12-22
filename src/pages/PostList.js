@@ -198,7 +198,7 @@ const PostList = () => {
                     <span style={{ fontSize: '40px' }}>🎬</span>
                   ) : (
                     <img 
-                      src={`http://localhost:8020${post.thumbnail}`} 
+                      src={`http://34.50.13.223.nip.io:8020${post.thumbnail}`} 
                       alt="thumbnail" 
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
