@@ -129,7 +129,7 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
 
         // 1. 리액트 개발 서버 주소 허용
-        configuration.addAllowedOrigin("http://localhost:3000");
+        configuration.addAllowedOrigin("http://34.50.13.223.nip.io:3000");
 
         // 2. 모든 HTTP 메서드 허용 (GET, POST, PUT, DELETE, OPTIONS 등)
         configuration.addAllowedMethod("*");

@@ -112,4 +112,17 @@ public class PostController {
         log.info("통계 데이터 조회 요청");
         return ResponseEntity.ok(postService.getRiskStatistics());
     }
+
+    /**
+     * [추가됨] 홈 화면용 비교 데이터 API
+     * URL: GET /posts/home/comparison
+     * 설명: 가장 위험한 사진과 안전한 사진을 반환합니다.
+     */
+    @GetMapping("/home/comparison")
+    public ResponseEntity<HomeComparisonDTO> getHomeComparison() {
+        // [주의] PostService 인터페이스에 getHomeComparisonData() 메서드 정의가 필요합니다!
+        // (아래 설명 참고)
+        // PostServiceImpl 에서는 구현했지만, 인터페이스에도 추가해줘야 합니다.
+        return ResponseEntity.ok(postService.getHomeComparisonData());
+    }
 }

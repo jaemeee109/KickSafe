@@ -40,7 +40,15 @@ dependencies {
 
     // ================== 3. 데이터베이스 (MariaDB & JPA) ==================
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client' // MariaDB 연결 드라이버
+
+    // ------------------------------------------------------------
+    // [이전 코드]
+    // runtimeOnly 'org.mariadb.jdbc:mariadb-java-client' // MariaDB 연결 드라이버
+    // ------------------------------------------------------------
+    // [수정된 코드] MariaDB 드라이버 (상세 설명 추가)
+    // 설명: Java 애플리케이션이 MariaDB 10.6 서버와 통신할 수 있게 해주는 커넥터입니다.
+    // 버전: Spring Boot Parent가 호환되는 최적의 버전을 자동으로 관리합니다.
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
 
     // QueryDSL (복잡한 쿼리를 쉽게 짜게 해주는 도구)
     implementation 'com.querydsl:querydsl-jpa:5.0.0:jakarta'
@@ -74,6 +82,10 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
+// ------------------------------------------------------------
+// [QueryDSL 빌드 설정]
+// 설명: QueryDSL이 생성하는 Q클래스(자동생성 코드)가 저장될 위치를 설정합니다.
+// ------------------------------------------------------------
 def querydslDir = layout.buildDirectory.get().getAsFile().getAbsolutePath() + '/generated/querydsl'
 
 sourceSets {
@@ -85,6 +97,14 @@ tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
 }
 
+// ------------------------------------------------------------
+// [이전 코드]
+// clean {
+//    delete file(querydslDir)
+// }
+// ------------------------------------------------------------
+// [수정된 코드] Clean 태스크 설정
+// 설명: 'clean' 명령어 실행 시 생성된 Q클래스 파일들도 깔끔하게 지워줍니다.
 clean {
     delete file(querydslDir)
 }

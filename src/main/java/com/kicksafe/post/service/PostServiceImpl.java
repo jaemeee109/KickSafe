@@ -7,6 +7,7 @@ import com.kicksafe.global.common.image.FileStore;
 import com.kicksafe.global.common.image.UploadFileDTO;
 import com.kicksafe.global.common.paging.PageRequestDTO;
 import com.kicksafe.global.common.paging.PageResponseDTO;
+import com.kicksafe.member.constant.MemberRole;
 import com.kicksafe.member.domain.Member;
 import com.kicksafe.member.repository.MemberRepository;
 import com.kicksafe.post.constant.MediaType;
@@ -14,10 +15,12 @@ import com.kicksafe.post.constant.RiskLevel;
 import com.kicksafe.post.domain.Post;
 import com.kicksafe.post.domain.PostMedia;
 import com.kicksafe.post.dto.*;
+import com.kicksafe.post.repository.PostMediaRepository;
 import com.kicksafe.post.repository.PostRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +41,7 @@ public class PostServiceImpl implements PostService {
     private final MemberRepository memberRepository;
     private final FileStore fileStore; // 파일 저장을 도와주는 커스텀 클래스
     private final AiService aiService; // AI 서비스 주입
+    private final PostMediaRepository postMediaRepository; // [★추가] 이미지 전용 레포지토리 주입
 
     // [★추가됨] 자바 객체(List)를 JSON 문자열로 바꿔주는 도구 주입
     private final ObjectMapper objectMapper;
@@ -404,21 +408,29 @@ public class PostServiceImpl implements PostService {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new RuntimeException("게시글을 찾을 수 없습니다."));
 
-        // 2. 본인 확인
-        if (!post.getMember().getId().equals(memberId)) {
+        // [★수정됨] 삭제를 요청한 사람의 정보(Role)를 확인하기 위해 조회
+        Member requester = memberRepository.findById(memberId)
+                .orElseThrow(() -> new RuntimeException("사용자 정보를 찾을 수 없습니다."));
+
+        // 2. 권한 확인 로직 변경
+        // "작성자가 아니고" AND "관리자가 아니라면" -> 에러 발생
+        boolean isWriter = post.getMember().getId().equals(memberId);
+        boolean isAdmin = requester.getRole() == MemberRole.ADMIN;
+
+        if (!isWriter && !isAdmin) {
             throw new RuntimeException("삭제 권한이 없습니다.");
         }
 
         // 3. [파일 삭제] 하드디스크에서 이미지 파일들 먼저 삭제
-        // (DB 에서 지워지기 전에 파일명을 조회해서 지워야 함)
         for (PostMedia media : post.getMedias()) {
             if (media.getStoredFileName() != null) {
                 fileStore.deleteFile(media.getStoredFileName());
             }
         }
 
-        // 4. [DB 삭제] 게시글 삭제 (연관된 이미지 데이터도 Cascade 로 자동 삭제됨)
+        // 4. [DB 삭제]
         postRepository.delete(post);
+        log.info("게시글 삭제 완료 (요청자: {}, 게시글: {})", memberId, postId);
     }
 
     /**
@@ -428,5 +440,29 @@ public class PostServiceImpl implements PostService {
     @Override
     public List<StatisticsResponseDTO> getRiskStatistics() {
         return postRepository.findRiskLevelStatistics();
+    }
+
+    /**
+     * [메인 홈 화면용 비교 데이터 조회]
+     * 가장 위험한 사진 1장 vs 가장 안전한 사진 1장을 찾아서 반환합니다.
+     */
+    @Override
+    public HomeComparisonDTO getHomeComparisonData() {
+        // 1. 페이징 조건 생성 (딱 1개만 가져오기)
+        Pageable limitOne = PageRequest.of(0, 1);
+
+        // 2. 가장 위험한 사진 찾기
+        List<PostMedia> dangerList = postMediaRepository.findMostDangerous(limitOne);
+        PostMedia dangerous = dangerList.isEmpty() ? null : dangerList.get(0);
+
+        // 3. 가장 안전한 사진 찾기
+        List<PostMedia> safeList = postMediaRepository.findSafest(limitOne);
+        PostMedia safe = safeList.isEmpty() ? null : safeList.get(0);
+
+        // 4. 결과 DTO 에 담기 (사진이 없을 경우 null 처리)
+        return HomeComparisonDTO.builder()
+                .dangerousImage(dangerous != null ? HomeComparisonDTO.ImageSummary.from(dangerous) : null)
+                .safeImage(safe != null ? HomeComparisonDTO.ImageSummary.from(safe) : null)
+                .build();
     }
 }

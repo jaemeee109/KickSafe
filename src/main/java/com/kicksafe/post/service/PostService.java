@@ -46,4 +46,7 @@ public interface PostService {
      * 위험 등급별 게시글 개수를 반환합니다.
      */
     List<StatisticsResponseDTO> getRiskStatistics();
+
+    // [추가] 홈 화면용 데이터 조회
+    HomeComparisonDTO getHomeComparisonData();
 }

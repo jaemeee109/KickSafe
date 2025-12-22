@@ -27,7 +27,7 @@ public class OAuth2FailureHandler extends SimpleUrlAuthenticationFailureHandler 
         // 한글 메시지가 깨지지 않게 인코딩
         String errorMessage = URLEncoder.encode(exception.getMessage(), StandardCharsets.UTF_8);
 
-        String targetUrl = UriComponentsBuilder.fromUriString("http://localhost:3000/login")
+        String targetUrl = UriComponentsBuilder.fromUriString("http://34.50.13.223.nip.io:3000/login")
                 .queryParam("error", errorMessage)
                 .build().toUriString();
 
