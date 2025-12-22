@@ -1,12 +1,11 @@
-# services/roboflow_service.py
+# app/services/roboflow_service.py
 # ------------------------------------------
-# YOLOv8-OBB 모델을 사용한 객체 탐지 + KickSafe 위험도 스코어링 로직
-# - (추가) COCO 사전학습 모델로 person 카운트(동승자 수) 추정
+# [긴급 수정] 라벨 명칭 불일치 수정 (electric_scooter 추가)
 # ------------------------------------------
 
 import io
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
 import numpy as np
 from PIL import Image
@@ -21,28 +20,20 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # -----------------------------
-# 모델 로드
+# 1. 모델 로드
 # -----------------------------
 try:
     logger.info(f"Loading YOLOv8-OBB model from: {settings.YOLO_MODEL_PATH}")
     _yolo_model = YOLO(settings.YOLO_MODEL_PATH)
-
-    print("[MODEL][PRINT] YOLO_MODEL_PATH =", settings.YOLO_MODEL_PATH)
-    print("[MODEL][PRINT] names =", _yolo_model.names)
-
-    logger.warning(f"[MODEL] names={_yolo_model.names}")  # warning은 보통 콘솔에 잘 뜸
 except Exception as e:
     logger.error(f"YOLOv8-OBB 모델 로드 실패: {e}")
     _yolo_model = None
 
-# (추가) person 검출용 COCO 모델 (동승자 수 추정)
-# - ultralytics가 없으면 requirements에 이미 있으므로 OK
-# - 첫 실행 시 yolov8n.pt 자동 다운로드될 수 있음
 try:
     logger.info("Loading YOLOv8 person model (COCO): yolov8n.pt")
     _person_model = YOLO("yolov8n.pt")
 except Exception as e:
-    logger.warning(f"Person 모델 로드 실패(동승자 추정 비활성): {e}")
+    logger.warning(f"Person 모델 로드 실패: {e}")
     _person_model = None
 
 
@@ -50,8 +41,7 @@ def _ensure_model_loaded():
     if _yolo_model is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="YOLOv8-OBB 모델이 로드되지 않았습니다. "
-                   "YOLO_MODEL_PATH 설정 또는 학습/모델 경로를 확인해주세요.",
+            detail="AI 모델 로드 실패",
         )
 
 
@@ -59,17 +49,14 @@ def _open_image(image_bytes: bytes) -> Image.Image:
     try:
         return Image.open(io.BytesIO(image_bytes)).convert("RGB")
     except Exception as e:
-        logger.error(f"이미지 디코딩 실패: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="유효한 이미지 형식이 아닙니다.",
-        )
+        raise HTTPException(status_code=400, detail="이미지 로드 실패")
 
 
 def _parse_obb_result(result) -> List[OrientedBBox]:
     detections: List[OrientedBBox] = []
     names = result.names
-
+    
+    # 1. OBB (회전 박스) 결과 처리
     obb = getattr(result, "obb", None)
     if obb is not None and hasattr(obb, "xyxyxyxy"):
         xyxyxyxy = obb.xyxyxyxy.cpu().numpy()
@@ -77,270 +64,152 @@ def _parse_obb_result(result) -> List[OrientedBBox]:
         clses = obb.cls.cpu().numpy().astype(int)
 
         for i in range(len(xyxyxyxy)):
-            coords_flat = np.array(xyxyxyxy[i]).reshape(-1).tolist()
-
-            if len(coords_flat) == 8:
-                x1, y1, x2, y2, x3, y3, x4, y4 = coords_flat
-            elif len(coords_flat) == 4:
-                x1, y1, x2, y2 = coords_flat
-                x3, y3 = x2, y2
-                x4, y4 = x1, y2
-            else:
-                logger.warning(
-                    f"예상치 못한 OBB 좌표 길이입니다. len={len(coords_flat)}, coords={coords_flat}"
-                )
-                continue
-
             conf = float(confs[i])
             cls_idx = int(clses[i])
             label = names.get(cls_idx, str(cls_idx))
 
-            detections.append(
-                OrientedBBox(
-                    label=label,
-                    confidence=conf,
-                    x1=x1, y1=y1,
-                    x2=x2, y2=y2,
-                    x3=x3, y3=y3,
-                    x4=x4, y4=y4,
+            # [수정] electric_scooter (언더바) 추가!
+            target_labels = [
+                'rider', 'human', 'person', 
+                'electric-scooter', 'electric_scooter', 'scooter', 'kickboard', 'patin'
+            ]
+
+            if label in target_labels:
+                if conf < 0.15: continue
+            else:
+                if conf < 0.05: continue 
+
+            coords = np.array(xyxyxyxy[i]).reshape(-1).tolist()
+            if len(coords) == 8:
+                x1, y1, x2, y2, x3, y3, x4, y4 = coords
+                detections.append(
+                    OrientedBBox(label=label, confidence=conf, x1=x1, y1=y1, x2=x2, y2=y2, x3=x3, y3=y3, x4=x4, y4=y4)
                 )
-            )
         return detections
 
+    # 2. 일반 Box (수평 박스) 결과 처리
     boxes = getattr(result, "boxes", None)
     if boxes is not None and hasattr(boxes, "xyxy"):
         xyxy = boxes.xyxy.cpu().numpy()
         confs = boxes.conf.cpu().numpy()
         clses = boxes.cls.cpu().numpy().astype(int)
-
         for i in range(len(xyxy)):
-            x1, y1, x2, y2 = xyxy[i].tolist()
             conf = float(confs[i])
             cls_idx = int(clses[i])
             label = names.get(cls_idx, str(cls_idx))
 
+            target_labels = [
+                'rider', 'human', 'person', 
+                'electric-scooter', 'electric_scooter', 'scooter', 'kickboard'
+            ]
+
+            if label in target_labels:
+                if conf < 0.15: continue
+            else:
+                if conf < 0.05: continue
+
+            x1, y1, x2, y2 = xyxy[i].tolist()
             detections.append(
-                OrientedBBox(
-                    label=label,
-                    confidence=conf,
-                    x1=x1, y1=y1,
-                    x2=x2, y2=y1,
-                    x3=x2, y3=y2,
-                    x4=x1, y4=y2,
-                )
+                OrientedBBox(label=label, confidence=conf, x1=x1, y1=y1, x2=x2, y2=y1, x3=x2, y3=y2, x4=x1, y4=y2)
             )
 
     return detections
 
 
-# ------------------------------------------
-# 위험 점수 로직
-# ------------------------------------------
-
-RISK_WEIGHTS = {
-    "Patinetes electricos - v4 2023-07-28 9-05pm": 20.0,
-    "electric-scooter": 10.0,
-
-    # 보호장비 관련(모델이 실제로 출력해야 효과 있음)
-    "no_helmet": 30.0,
-    "helmet": 5.0,
-
-    # 탑승 인원 관련(모델이 출력하면 사용)
-    "two_riders": 25.0,
-    "three_riders": 35.0,
-
-    # 주행 위치/환경
-    "sidewalk_riding": 20.0,
-    "road_riding": 10.0,
-    "bike_lane_riding": 5.0,
-
-    # 교통법규 위반
-    "red_light_violation": 30.0,
-    "wrong_way": 25.0,
-    "crosswalk_violation": 20.0,
-
-    # 주변 객체(충돌 위험)
-    "car_near": 15.0,
-    "pedestrian_near": 15.0,
-    "scooter_near": 10.0,
-
-    # 시간/가시성
-    "night": 10.0,
-    "poor_visibility": 15.0,
-
-    # (추가) rider가 기본 출력일 때 최소 가중치 부여
-    "rider": 10.0,  # 기본 주행 위험(현재 모델이 rider만 뱉는 상황 대응)
-}
-
-LABEL_ALIAS_MAP = {
-    # 필요 시 별칭 추가
-}
-
-DEFAULT_RISK_WEIGHT: float = 5.0
-
-# (추가) 동승자 추정 가중치
-PASSENGER_EXTRA_WEIGHT = 25.0   # (rider_count-1) 1명당 추가 위험
-RIDER_COUNT_CAP = 6             # 너무 과대검출될 경우 상한
-
-
 def _risk_level_from_score(score: float) -> Tuple[str, str]:
-    if score < 25:
-        return "LOW", "안전"
-    if score < 50:
-        return "MEDIUM", "주의"
-    if score < 75:
-        return "HIGH", "위험"
+    if score < 25: return "LOW", "안전"
+    if score < 71: return "MEDIUM", "주의"
+    if score < 90: return "HIGH", "위험"
     return "CRITICAL", "매우 위험"
 
 
-def _obb_to_aabb(det: OrientedBBox) -> Tuple[float, float, float, float]:
-    xs = [det.x1, det.x2, det.x3, det.x4]
-    ys = [det.y1, det.y2, det.y3, det.y4]
-    return float(min(xs)), float(min(ys)), float(max(xs)), float(max(ys))
-
-
-def _iou(a: Tuple[float, float, float, float], b: Tuple[float, float, float, float]) -> float:
-    ax1, ay1, ax2, ay2 = a
-    bx1, by1, bx2, by2 = b
-
-    ix1 = max(ax1, bx1)
-    iy1 = max(ay1, by1)
-    ix2 = min(ax2, bx2)
-    iy2 = min(ay2, by2)
-
-    iw = max(0.0, ix2 - ix1)
-    ih = max(0.0, iy2 - iy1)
-    inter = iw * ih
-    if inter <= 0:
-        return 0.0
-
-    area_a = max(0.0, (ax2 - ax1)) * max(0.0, (ay2 - ay1))
-    area_b = max(0.0, (bx2 - bx1)) * max(0.0, (by2 - by1))
-    denom = area_a + area_b - inter
-    return float(inter / denom) if denom > 0 else 0.0
-
-
-def _detect_person_boxes(image: Image.Image, conf_thres: float = 0.10) -> List[Tuple[float, float, float, float]]:
-    """
-    COCO person(클래스 0) 박스 리스트 반환 (axis-aligned bbox)
-    """
-    if _person_model is None:
-        return []
-
-    try:
-        r = _person_model.predict(
-            source=image,
-            verbose=False,
-            conf=0.10,
-            imgsz=960
-        )[0]
-
-    except Exception as e:
-        logger.warning(f"Person 추론 실패(동승자 추정 스킵): {e}")
-        return []
-
-    boxes = getattr(r, "boxes", None)
-    if boxes is None or not hasattr(boxes, "xyxy"):
-        return []
-
-    xyxy = boxes.xyxy.cpu().numpy()
-    confs = boxes.conf.cpu().numpy()
-    clses = boxes.cls.cpu().numpy().astype(int)
-
-    person_boxes: List[Tuple[float, float, float, float]] = []
-    for i in range(len(xyxy)):
-        if clses[i] != 0:  # COCO person class id = 0
-            continue
-        if float(confs[i]) < conf_thres:
-            continue
-        x1, y1, x2, y2 = xyxy[i].tolist()
-        person_boxes.append((float(x1), float(y1), float(x2), float(y2)))
-
-    return person_boxes
-
-
-def _estimate_rider_count(detections: List[OrientedBBox], image: Image.Image) -> Optional[int]:
-    rider_dets = [d for d in detections if d.label == "rider"]
-    if not rider_dets:
-        return None
-
-    # rider 영역
-    rider_aabb = _obb_to_aabb(rider_dets[0])
-
-    persons = _detect_person_boxes(image, conf_thres=0.20)
-    if not persons:
-        return None
-
-    rx1, ry1, rx2, ry2 = rider_aabb
-
-    cnt = 0
-    for px1, py1, px2, py2 in persons:
-        # 중심점이 rider 영역 안에 있으면 탑승자로 간주
-        cx = (px1 + px2) / 2
-        cy = (py1 + py2) / 2
-        if rx1 <= cx <= rx2 and ry1 <= cy <= ry2:
-            cnt += 1
-
-    return int(np.clip(cnt, 1, RIDER_COUNT_CAP))
-
-
-
+# =========================================================================
+# [핵심] 킥보드 vs 사람 비율 계산 로직
+# =========================================================================
 def _calculate_risk(detections: List[OrientedBBox], image: Image.Image) -> RiskDetail:
     if not detections:
-        score = 0.0
-        level, level_kor = _risk_level_from_score(score)
-        return RiskDetail(
-            risk_score=score,
-            risk_level=level,
-            risk_level_kor=level_kor,
-            risk_factors=[],
-        )
+        return RiskDetail(risk_score=0.0, risk_level="LOW", risk_level_kor="안전", risk_factors=[])
 
     score = 0.0
     risk_factors: List[str] = []
+    
+    # 1. 객체 수 세기
+    rider_count = 0
+    scooter_count = 0
+    has_no_helmet = False 
 
-    # 1) 기존: 라벨 기반 가중치 합산
+    # 재학습 라벨 감지 여부
+    has_two_rider_label = False
+    has_three_rider_label = False
+
     for det in detections:
-        raw_label = det.label
-        normalized_label = LABEL_ALIAS_MAP.get(raw_label, raw_label)
-        weight = RISK_WEIGHTS.get(normalized_label, DEFAULT_RISK_WEIGHT)
-        contrib = weight * float(det.confidence)
+        label = det.label.lower() 
 
-        if contrib <= 0:
-            continue
+        # A. 사람(rider) 카운트
+        if label in ['rider', 'human', 'person']:
+            rider_count += 1
+            
+        # B. 킥보드(scooter) 카운트 (언더바 포함!)
+        elif label in ['electric-scooter', 'electric_scooter', 'scooter', 'kickboard', 'patin']:
+            scooter_count += 1
 
-        score += contrib
+        # C. 헬멧 미착용 체크
+        elif 'no_helmet' in label:
+            if not has_no_helmet:
+                score += 20.0
+                risk_factors.append("헬멧 미착용 감지 (+20점)")
+                has_no_helmet = True
+        
+        # D. 재학습된 라벨
+        elif label in ['two', 'two_riders', '2']:
+             if not has_two_rider_label:
+                has_two_rider_label = True
+        elif label in ['three', 'three_riders', '3', 'multi']:
+             if not has_three_rider_label:
+                has_three_rider_label = True
 
-        if normalized_label == raw_label:
-            factor_label = raw_label
-        else:
-            factor_label = f"{raw_label} -> {normalized_label}"
+    # -----------------------------------------------------------
+    # [논리 판단] 킥보드 수와 사람 수 비교
+    # -----------------------------------------------------------
+    if scooter_count > 0:
 
-        risk_factors.append(
-            f"{factor_label} (conf={det.confidence:.2f}) => +{contrib:.1f}점"
-        )
+        # 1. 킥보드 1대에 사람 2명 -> 2인 탑승! (이게 아까 0점 나왔던 케이스 해결)
+        if scooter_count == 1 and rider_count == 2:
+            # 라벨이 없어도 숫자로 판단
+            if not has_two_rider_label:
+                score += 50.0
+                risk_factors.append("2인 탑승 의심 (킥보드 1대 / 사람 2명) (+50점)")
 
-    # 2) (추가) 동승자 수 추정 → 추가 가중치
-    rider_count = _estimate_rider_count(detections, image)
-    #  디버그(응답에 강제로 노출)
-    persons_dbg = _detect_person_boxes(image, conf_thres=0.10)
-    risk_factors.append(f"[DBG] persons={len(persons_dbg)}, rider_count={rider_count}")
-    if rider_count is not None and rider_count >= 2:
-        extra = (rider_count - 1) * PASSENGER_EXTRA_WEIGHT
-        score += float(extra)
-        risk_factors.append(f"동승자 추정 {rider_count}명 => +{extra:.1f}점")
+        # 2. 킥보드 1대에 사람 3명 이상 -> 다인 탑승!
+        elif scooter_count == 1 and rider_count >= 3:
+            if not has_three_rider_label:
+                score += 80.0
+                risk_factors.append(f"3인 이상 탑승 의심 ({rider_count}명) (+80점)")
 
-    # 2-1) 헬멧 탐지 실패 + 다인 탑승 → 무헬멧 위험 가중(규칙 기반 보완)
-    has_helmet = any(d.label == "helmet" for d in detections)
-    has_no_helmet = any(d.label == "no_helmet" for d in detections)
+        # 3. 킥보드 수와 사람 수가 같음 -> 1인 1기기 (안전)
+        elif scooter_count == rider_count:
+             risk_factors.append(f"1인 1기기 탑승 추정 (기기 {scooter_count}대 / 사람 {rider_count}명)")
 
-    # no_helmet이 직접 검출되면 그건 이미 위에서 RISK_WEIGHTS로 점수 반영됨
-    # 여기서는 "다인 탑승인데 helmet이 하나도 안 잡힌 경우"만 추가 패널티
-    if rider_count is not None and rider_count >= 2 and (not has_helmet) and (not has_no_helmet):
-        score += 40.0
-        risk_factors.append("헬멧 미탐지 + 다인 탑승 => +40점")
+        # 4. 사람이 더 많음 (일반화)
+        elif rider_count > scooter_count:
+             # 라벨 점수 받은 적 없으면 점수 부여
+             if score < 50:
+                 extra = (rider_count - scooter_count) * 30.0
+                 score += extra
+                 risk_factors.append(f"초과 인원 감지 (+{extra}점)")
+    
+    # -----------------------------------------------------------
+    # 라벨 점수 합산 (중복 방지 로직)
+    # -----------------------------------------------------------
+    if has_three_rider_label and score < 80:
+        score += 80.0
+        risk_factors.append("3인 이상 탑승 라벨 감지 (+80점)")
+    elif has_two_rider_label and score < 50:
+        score += 50.0
+        risk_factors.append("2인 탑승 라벨 감지 (+50점)")
 
-    # 3) 클램핑 + 등급
+
+    # 점수 범위 제한 (0 ~ 100)
     score = float(np.clip(score, 0.0, float(settings.RISK_SCORE_MAX)))
     level, level_kor = _risk_level_from_score(score)
 
@@ -352,29 +221,48 @@ def _calculate_risk(detections: List[OrientedBBox], image: Image.Image) -> RiskD
     )
 
 
-
+# =========================================================================
+# 이미지 분석 실행
+# =========================================================================
 def analyze_image(image_bytes: bytes) -> DetectionResult:
     _ensure_model_loaded()
-
     image = _open_image(image_bytes)
 
+    detections = []
+
     try:
-        results = _yolo_model.predict(
-            source=image,
-            verbose=False,
-            conf=0.10,  # 헬멧 같은 소형 객체 살리기
-            imgsz=1024  # 해상도 올려 소형 객체 탐지 강화
+        results_yolo = _yolo_model.predict(
+            source=image, 
+            verbose=False, 
+            conf=0.05, 
+            imgsz=1024, 
+            agnostic_nms=True 
         )
+        if results_yolo:
+            detections.extend(_parse_obb_result(results_yolo[0]))
+
+        if _person_model:
+            results_person = _person_model.predict(
+                source=image, 
+                verbose=False, 
+                conf=0.10,   
+                imgsz=960, 
+                classes=[0], 
+                agnostic_nms=True
+            )
+            if results_person:
+                person_dets = _parse_obb_result(results_person[0])
+                for d in person_dets:
+                    d.label = 'rider'
+                detections.extend(person_dets)
+
     except Exception as e:
-        logger.error(f"YOLO 추론 중 오류 발생: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="YOLOv8-OBB 추론 중 오류가 발생했습니다.",
-        )
+        logger.error(f"AI 추론 오류: {e}")
+        if not detections: detections = []
 
-    detections = _parse_obb_result(results[0]) if results else []
-
-    # (중요) image를 _calculate_risk에 전달
     risk = _calculate_risk(detections, image)
+
+    print(f"\n[🔍 AI 결과] 객체: {[d.label for d in detections]}")
+    print(f"[🔍 AI 결과] 점수: {risk.risk_score}점\n")
 
     return DetectionResult(detections=detections, risk=risk)
