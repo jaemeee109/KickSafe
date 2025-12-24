@@ -36,7 +36,7 @@
 <p/>   │
 <p/>   ├── Axios 요청 (JWT 포함)
 <p/>   ▼
-<p/><b>Spring Boot (API Server + Security)</b>b>
+<p/><b>RestAPI (SpringBoot/JAVA) (API Server + Security)</b>b>
 <p/>   │  ├─ 소셜 로그인(OAuth2) 처리
 <p/>   │  │    - 카카오 / 구글 / 네이버 / 인스타 OAuth2 연동
 <p/>   │  │    - 최초 로그인 시 회원 정보 자동 생성(소셜회원가입)
