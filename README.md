@@ -2,7 +2,7 @@
 <p/>=============================================
 <p/>
 <p/><b>프로젝트 명</b> : KickSafe (킥세이프)
-<p/><b>개발 기간</b> : 2025.11.26 ~ ing
+<p/><b>개발 기간</b> : 2025.11.26 ~ 2025.12.24
 <p/><b>과정</b> : K-디지털트레이닝 [심화, AI Roboflow를 활용한 부유물탐지 시스템 구축과정]
 <p/><b>인원</b> : 2명 
 <p/><b>역할분담</b> : 
@@ -20,7 +20,7 @@
 <p/>
 <p/><b>기술스택</b> :
 <p/><b>- Backend</b> : SpringBoot(API Server),Spring Security, JWT, JPA, MariaDB
-<p/><b>- AI</b> :  FastAPI
+<p/><b>- AI</b> :  FastAPI (AI Inference Server)
 <p/><b>- Frontend</b> : React · Bootstrap
 <p/><b>- Deployment</b> : Google Cloud Platform
 <p/>=============================================
