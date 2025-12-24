@@ -2,12 +2,12 @@
 <p/>=============================================
 <p/>
 <p/><b>프로젝트 명</b> : KickSafe (킥세이프)
-<p/><b>개발 기간</b> : 2025.11.26 ~ ing
+<p/><b>개발 기간</b> : 2025.11.26 ~ 2025.12.24
 <p/><b>과정</b> : K-디지털트레이닝 [심화, AI Roboflow를 활용한 부유물탐지 시스템 구축과정]
-<p/><b>인원</b> : 3명 
+<p/><b>인원</b> : 2명 
 <p/><b>역할분담</b> : 
-<p/>- 박희진 : 팀장 , 백엔드-SpringBoot(Java), 프론트(React), AI
-<P/>- 이재은 : 백엔드-PyCharm (Python), AI
+<p/>- 박희진 : 팀장 , DataBase, SpringBoot, React, GCP
+<P/>- 이재은 :  FAST API, Roboflow (AI)
 <p/><b>개요</b> : 'KickSafe'는 전동킥보드 주행 중 발생할 수 있는 위험 상황을 
 <p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;이미지/영상 기반 AI 모델로 탐지하고 위험 등급을 매기는 웹 서비스 입니다.
 <p/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;사용자는 위험 상황을 게시물로 공유할 수 있으며,
@@ -19,10 +19,10 @@
 <p/>=============================================
 <p/>
 <p/><b>기술스택</b> :
-<p/><b>- Backend</b> : SpringBoot(RestAPI),Spring Security, JWT, JPA, MariaDB, AWS/Docker
-<p/><b>- AI</b> :  Python(FastAPI), Roboflow Object Detection Model, 위험도 스코어링 로직
-<p/><b>- Frontend</b> : React
-<p/>
+<p/><b>- Backend</b> : SpringBoot(API Server),Spring Security, JWT, JPA, MariaDB
+<p/><b>- AI</b> :  FastAPI (AI Inference Server)
+<p/><b>- Frontend</b> : React · Bootstrap
+<p/><b>- Deployment</b> : Google Cloud Platform
 <p/>=============================================
 <p/>
 <p/><b>시스템 구조</b> :
@@ -36,7 +36,7 @@
 <p/>   │
 <p/>   ├── Axios 요청 (JWT 포함)
 <p/>   ▼
-<p/><b>Spring Boot (REST API + Security)</b>b>
+<p/><b>Spring Boot (API Server + Security)</b>b>
 <p/>   │  ├─ 소셜 로그인(OAuth2) 처리
 <p/>   │  │    - 카카오 / 구글 / 네이버 / 인스타 OAuth2 연동
 <p/>   │  │    - 최초 로그인 시 회원 정보 자동 생성(소셜회원가입)
@@ -58,7 +58,7 @@
 <p/>
 <p/><b>FastAPI (Python)</b>b>
 <p/>   │
-<p/>   └─ Roboflow 모델로 이미지/영상 분석 → 위험 점수 반환
+<p/>   └─ Roboflow YOLOv8 모델로 이미지/영상 분석 → 위험 점수 반환
 <p/>      (Spring Boot에서 AI 서버 호출 후 결과를 게시물에 저장/표시)
 <p/>=============================================
 <p/>
